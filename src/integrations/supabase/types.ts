@@ -14,7 +14,181 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      artworks: {
+        Row: {
+          artist_id: string
+          category: string | null
+          created_at: string | null
+          description: string | null
+          id: string
+          image_url: string
+          is_available: boolean | null
+          price: number
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          artist_id: string
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          image_url: string
+          is_available?: boolean | null
+          price: number
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          artist_id?: string
+          category?: string | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string
+          is_available?: boolean | null
+          price?: number
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      cart_items: {
+        Row: {
+          artwork_id: string
+          created_at: string | null
+          id: string
+          quantity: number | null
+          user_id: string
+        }
+        Insert: {
+          artwork_id: string
+          created_at?: string | null
+          id?: string
+          quantity?: number | null
+          user_id: string
+        }
+        Update: {
+          artwork_id?: string
+          created_at?: string | null
+          id?: string
+          quantity?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cart_items_artwork_id_fkey"
+            columns: ["artwork_id"]
+            isOneToOne: false
+            referencedRelation: "artworks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      custom_requests: {
+        Row: {
+          artist_id: string | null
+          budget: number | null
+          buyer_id: string
+          created_at: string | null
+          description: string
+          id: string
+          status: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          artist_id?: string | null
+          budget?: number | null
+          buyer_id: string
+          created_at?: string | null
+          description: string
+          id?: string
+          status?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          artist_id?: string | null
+          budget?: number | null
+          buyer_id?: string
+          created_at?: string | null
+          description?: string
+          id?: string
+          status?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      orders: {
+        Row: {
+          artist_id: string
+          artwork_id: string
+          buyer_id: string
+          created_at: string | null
+          id: string
+          quantity: number | null
+          status: string | null
+          total_price: number
+        }
+        Insert: {
+          artist_id: string
+          artwork_id: string
+          buyer_id: string
+          created_at?: string | null
+          id?: string
+          quantity?: number | null
+          status?: string | null
+          total_price: number
+        }
+        Update: {
+          artist_id?: string
+          artwork_id?: string
+          buyer_id?: string
+          created_at?: string | null
+          id?: string
+          quantity?: number | null
+          status?: string | null
+          total_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_artwork_id_fkey"
+            columns: ["artwork_id"]
+            isOneToOne: false
+            referencedRelation: "artworks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          email: string
+          full_name: string | null
+          id: string
+          updated_at: string | null
+          user_type: string
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          full_name?: string | null
+          id: string
+          updated_at?: string | null
+          user_type: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+          user_type?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
