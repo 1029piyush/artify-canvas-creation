@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, Palette, LogOut, User } from "lucide-react";
+import { ShoppingCart, Palette, LogOut, User, Package } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
@@ -93,11 +93,20 @@ const Navbar = () => {
               </Button>
 
               {userType === 'buyer' && (
-                <Button asChild variant="ghost" className="relative">
-                  <Link to="/cart">
-                    <ShoppingCart className="h-5 w-5" />
-                  </Link>
-                </Button>
+                <>
+                  <Button asChild variant="ghost" className="relative">
+                    <Link to="/cart">
+                      <ShoppingCart className="h-5 w-5" />
+                    </Link>
+                  </Button>
+                  
+                  <Button asChild variant="ghost">
+                    <Link to="/orders">
+                      <Package className="mr-2 h-4 w-4" />
+                      Orders
+                    </Link>
+                  </Button>
+                </>
               )}
 
               <Button asChild variant="ghost">
