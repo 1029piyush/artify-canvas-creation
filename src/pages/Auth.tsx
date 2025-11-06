@@ -6,11 +6,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 import { z } from "zod";
+import { Mail } from "lucide-react";
 
 const signUpSchema = z.object({
   email: z.string().email("Invalid email address").refine(
@@ -33,9 +33,7 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [signInOtpSent, setSignInOtpSent] = useState(false);
-  const [signUpOtpSent, setSignUpOtpSent] = useState(false);
-  const [otp, setOtp] = useState("");
+  const [linkSent, setLinkSent] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     fullName: "",
@@ -59,17 +57,63 @@ const Auth = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const handleSendSignUpOTP = async (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      signInSchema.parse({ email: formData.email });
+      setLoading(true);
+
+      const redirectUrl = `${window.location.origin}/`;
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: formData.email,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: redirectUrl,
+        },
+      });
+
+      if (error) throw error;
+
+      setLinkSent(true);
+      toast({
+        title: "Magic Link Sent!",
+        description: "Check your email for the sign-in link.",
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "Validation Error",
+          description: error.errors[0].message,
+          variant: "destructive",
+        });
+      } else if (error instanceof Error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
       signUpSchema.parse(formData);
       setLoading(true);
 
+      const redirectUrl = `${window.location.origin}/`;
+
       const { error } = await supabase.auth.signInWithOtp({
         email: formData.email,
         options: {
           shouldCreateUser: true,
+          emailRedirectTo: redirectUrl,
           data: {
             full_name: formData.fullName,
             user_type: formData.userType,
@@ -79,10 +123,10 @@ const Auth = () => {
 
       if (error) throw error;
 
-      setSignUpOtpSent(true);
+      setLinkSent(true);
       toast({
-        title: "OTP Sent!",
-        description: "Check your email for the verification code to complete signup.",
+        title: "Magic Link Sent!",
+        description: "Check your email for the sign-up link to complete registration.",
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -92,116 +136,6 @@ const Auth = () => {
           variant: "destructive",
         });
       } else if (error instanceof Error) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifySignUpOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      if (otp.length !== 6) {
-        throw new Error("Please enter the complete 6-digit OTP");
-      }
-
-      setLoading(true);
-
-      const { error } = await supabase.auth.verifyOtp({
-        email: formData.email,
-        token: otp,
-        type: 'email',
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "Account Created!",
-        description: "Welcome to Artify! Your account has been created successfully.",
-      });
-    } catch (error) {
-      if (error instanceof Error) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSendOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      signInSchema.parse({ email: formData.email });
-      setLoading(true);
-
-      const { error } = await supabase.auth.signInWithOtp({
-        email: formData.email,
-        options: {
-          shouldCreateUser: false,
-        },
-      });
-
-      if (error) throw error;
-
-      setSignInOtpSent(true);
-      toast({
-        title: "OTP Sent!",
-        description: "Check your email for the verification code.",
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        toast({
-          title: "Validation Error",
-          description: error.errors[0].message,
-          variant: "destructive",
-        });
-      } else if (error instanceof Error) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      if (otp.length !== 6) {
-        throw new Error("Please enter the complete 6-digit OTP");
-      }
-
-      setLoading(true);
-
-      const { error } = await supabase.auth.verifyOtp({
-        email: formData.email,
-        token: otp,
-        type: 'email',
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "Welcome back!",
-        description: "Signed in successfully",
-      });
-    } catch (error) {
-      if (error instanceof Error) {
         toast({
           title: "Error",
           description: error.message,
@@ -235,8 +169,8 @@ const Auth = () => {
             </TabsList>
             
             <TabsContent value="signin">
-              {!signInOtpSent ? (
-                <form onSubmit={handleSendOTP} className="space-y-4">
+              {!linkSent ? (
+                <form onSubmit={handleSignIn} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signin-email">Email</Label>
                     <Input
@@ -250,47 +184,39 @@ const Auth = () => {
                     />
                   </div>
                   <Button type="submit" className="w-full bg-[image:var(--gradient-primary)] hover:opacity-90 transition-all duration-300 shadow-[var(--shadow-card)]" disabled={loading}>
-                    {loading ? "Sending OTP..." : "Send OTP"}
+                    <Mail className="mr-2 h-4 w-4" />
+                    {loading ? "Sending..." : "Send Magic Link"}
                   </Button>
                 </form>
               ) : (
-                <form onSubmit={handleVerifyOTP} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="otp">Enter 6-digit OTP</Label>
-                    <div className="flex justify-center">
-                      <InputOTP maxLength={6} value={otp} onChange={setOtp}>
-                        <InputOTPGroup>
-                          <InputOTPSlot index={0} className="border-primary/30" />
-                          <InputOTPSlot index={1} className="border-primary/30" />
-                          <InputOTPSlot index={2} className="border-primary/30" />
-                          <InputOTPSlot index={3} className="border-primary/30" />
-                          <InputOTPSlot index={4} className="border-primary/30" />
-                          <InputOTPSlot index={5} className="border-primary/30" />
-                        </InputOTPGroup>
-                      </InputOTP>
-                    </div>
+                <div className="text-center space-y-4 py-4">
+                  <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                    <Mail className="h-8 w-8 text-primary" />
                   </div>
-                  <Button type="submit" className="w-full bg-[image:var(--gradient-primary)] hover:opacity-90 transition-all duration-300 shadow-[var(--shadow-card)]" disabled={loading}>
-                    {loading ? "Verifying..." : "Verify OTP"}
-                  </Button>
+                  <h3 className="font-semibold text-lg">Check your email</h3>
+                  <p className="text-sm text-muted-foreground">
+                    We sent a magic link to <span className="font-medium text-foreground">{formData.email}</span>
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Click the link in the email to sign in.
+                  </p>
                   <Button 
-                    type="button" 
                     variant="ghost" 
-                    className="w-full"
+                    className="w-full mt-4"
                     onClick={() => {
-                      setSignInOtpSent(false);
-                      setOtp("");
+                      setLinkSent(false);
+                      setFormData({ ...formData, email: "" });
                     }}
                   >
-                    Back to Email
+                    Use a different email
                   </Button>
-                </form>
+                </div>
               )}
             </TabsContent>
             
             <TabsContent value="signup">
-              {!signUpOtpSent ? (
-                <form onSubmit={handleSendSignUpOTP} className="space-y-4">
+              {!linkSent ? (
+                <form onSubmit={handleSignUp} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signup-name">Full Name</Label>
                     <Input
@@ -336,42 +262,33 @@ const Auth = () => {
                     </RadioGroup>
                   </div>
                   <Button type="submit" className="w-full bg-[image:var(--gradient-primary)] hover:opacity-90 transition-all duration-300 shadow-[var(--shadow-card)]" disabled={loading}>
-                    {loading ? "Sending OTP..." : "Send OTP"}
+                    <Mail className="mr-2 h-4 w-4" />
+                    {loading ? "Sending..." : "Send Magic Link"}
                   </Button>
                 </form>
               ) : (
-                <form onSubmit={handleVerifySignUpOTP} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-otp">Enter 6-digit OTP</Label>
-                    <p className="text-sm text-muted-foreground">We sent a verification code to {formData.email}</p>
-                    <div className="flex justify-center">
-                      <InputOTP maxLength={6} value={otp} onChange={setOtp}>
-                        <InputOTPGroup>
-                          <InputOTPSlot index={0} className="border-primary/30" />
-                          <InputOTPSlot index={1} className="border-primary/30" />
-                          <InputOTPSlot index={2} className="border-primary/30" />
-                          <InputOTPSlot index={3} className="border-primary/30" />
-                          <InputOTPSlot index={4} className="border-primary/30" />
-                          <InputOTPSlot index={5} className="border-primary/30" />
-                        </InputOTPGroup>
-                      </InputOTP>
-                    </div>
+                <div className="text-center space-y-4 py-4">
+                  <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                    <Mail className="h-8 w-8 text-primary" />
                   </div>
-                  <Button type="submit" className="w-full bg-[image:var(--gradient-primary)] hover:opacity-90 transition-all duration-300 shadow-[var(--shadow-card)]" disabled={loading}>
-                    {loading ? "Creating Account..." : "Verify & Create Account"}
-                  </Button>
+                  <h3 className="font-semibold text-lg">Check your email</h3>
+                  <p className="text-sm text-muted-foreground">
+                    We sent a magic link to <span className="font-medium text-foreground">{formData.email}</span>
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Click the link in the email to complete your registration.
+                  </p>
                   <Button 
-                    type="button" 
                     variant="ghost" 
-                    className="w-full"
+                    className="w-full mt-4"
                     onClick={() => {
-                      setSignUpOtpSent(false);
-                      setOtp("");
+                      setLinkSent(false);
+                      setFormData({ email: "", fullName: "", userType: "buyer" });
                     }}
                   >
-                    Back to Details
+                    Use a different email
                   </Button>
-                </form>
+                </div>
               )}
             </TabsContent>
           </Tabs>
