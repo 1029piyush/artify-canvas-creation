@@ -17,6 +17,7 @@ const artworkSchema = z.object({
   description: z.string().min(10, "Description must be at least 10 characters"),
   price: z.number().min(1, "Price must be greater than 0"),
   category: z.string().optional(),
+  stock_quantity: z.number().min(1, "Stock must be at least 1").max(10, "Maximum 10 items allowed"),
 });
 
 interface Artwork {
@@ -26,6 +27,7 @@ interface Artwork {
   price: number;
   image_url: string;
   category: string | null;
+  stock_quantity: number;
 }
 
 interface Order {
@@ -53,6 +55,7 @@ const ArtistDashboard = () => {
     description: "",
     price: "",
     category: "",
+    stock_quantity: "1",
   });
 
   useEffect(() => {
@@ -143,6 +146,7 @@ const ArtistDashboard = () => {
       const validatedData = artworkSchema.parse({
         ...formData,
         price: parseFloat(formData.price),
+        stock_quantity: parseInt(formData.stock_quantity),
       });
 
       setLoading(true);
@@ -171,6 +175,7 @@ const ArtistDashboard = () => {
           category: validatedData.category || null,
           image_url: publicUrl,
           is_available: true,
+          stock_quantity: validatedData.stock_quantity,
         });
 
       if (insertError) throw insertError;
@@ -180,7 +185,7 @@ const ArtistDashboard = () => {
         description: "Artwork uploaded successfully",
       });
 
-      setFormData({ title: "", description: "", price: "", category: "" });
+      setFormData({ title: "", description: "", price: "", category: "", stock_quantity: "1" });
       setImageFile(null);
       if (userId) fetchArtworks(userId);
     } catch (error) {
@@ -285,7 +290,7 @@ const ArtistDashboard = () => {
                     />
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-4 md:grid-cols-3">
                     <div className="space-y-2">
                       <Label htmlFor="price">Price (₹)</Label>
                       <Input
@@ -295,6 +300,20 @@ const ArtistDashboard = () => {
                         placeholder="0.00"
                         value={formData.price}
                         onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="stock_quantity">Stock Quantity</Label>
+                      <Input
+                        id="stock_quantity"
+                        type="number"
+                        min="1"
+                        max="10"
+                        placeholder="1"
+                        value={formData.stock_quantity}
+                        onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
                         required
                       />
                     </div>
@@ -334,7 +353,10 @@ const ArtistDashboard = () => {
                       <p className="text-sm text-muted-foreground line-clamp-2">
                         {artwork.description}
                       </p>
-                      <p className="font-bold text-primary">₹{artwork.price.toFixed(2)}</p>
+                      <div className="flex items-center justify-between">
+                        <p className="font-bold text-primary">₹{artwork.price.toFixed(2)}</p>
+                        <p className="text-sm text-muted-foreground">Stock: {artwork.stock_quantity}</p>
+                      </div>
                       <Button
                         variant="destructive"
                         size="sm"

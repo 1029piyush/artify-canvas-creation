@@ -13,6 +13,7 @@ interface Artwork {
   price: number;
   image_url: string;
   artist_id: string;
+  stock_quantity: number;
 }
 
 const Index = () => {
@@ -125,6 +126,7 @@ const Index = () => {
                   price={artwork.price}
                   imageUrl={artwork.image_url}
                   artistId={artwork.artist_id}
+                  stockQuantity={artwork.stock_quantity}
                   onAddToCart={fetchArtworks}
                 />
               ))}

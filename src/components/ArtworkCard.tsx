@@ -12,10 +12,11 @@ interface ArtworkCardProps {
   price: number;
   imageUrl: string;
   artistId: string;
+  stockQuantity: number;
   onAddToCart?: () => void;
 }
 
-const ArtworkCard = ({ id, title, description, price, imageUrl, artistId, onAddToCart }: ArtworkCardProps) => {
+const ArtworkCard = ({ id, title, description, price, imageUrl, artistId, stockQuantity, onAddToCart }: ArtworkCardProps) => {
   const { toast } = useToast();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -41,6 +42,15 @@ const ArtworkCard = ({ id, title, description, price, imageUrl, artistId, onAddT
       toast({
         title: "Cannot add own artwork",
         description: "You cannot add your own artwork to cart",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (stockQuantity <= 0) {
+      toast({
+        title: "Out of stock",
+        description: "This artwork is currently unavailable",
         variant: "destructive",
       });
       return;
@@ -88,15 +98,20 @@ const ArtworkCard = ({ id, title, description, price, imageUrl, artistId, onAddT
           {description && (
             <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{description}</p>
           )}
-          <p className="font-bold text-xl text-primary mt-2">₹{price.toFixed(2)}</p>
+          <div className="flex items-center justify-between mt-2">
+            <p className="font-bold text-xl text-primary">₹{price.toFixed(2)}</p>
+            <p className={`text-sm font-medium ${stockQuantity > 0 ? 'text-muted-foreground' : 'text-destructive'}`}>
+              {stockQuantity > 0 ? `${stockQuantity} in stock` : 'Out of Stock'}
+            </p>
+          </div>
         </div>
         <Button 
           className="w-full" 
           onClick={handleAddToCart}
-          disabled={userId === artistId}
+          disabled={userId === artistId || stockQuantity <= 0}
         >
           <ShoppingCart className="mr-2 h-4 w-4" />
-          Add to Cart
+          {stockQuantity <= 0 ? 'Out of Stock' : 'Add to Cart'}
         </Button>
       </CardFooter>
     </Card>

@@ -16,6 +16,7 @@ interface CartItem {
     price: number;
     image_url: string;
     artist_id: string;
+    stock_quantity: number;
   };
 }
 
@@ -51,7 +52,8 @@ const Cart = () => {
           title,
           price,
           image_url,
-          artist_id
+          artist_id,
+          stock_quantity
         )
       `)
       .eq('user_id', uid);
@@ -95,7 +97,27 @@ const Cart = () => {
     if (!userId || cartItems.length === 0) return;
 
     try {
-      // Create orders for each cart item
+      // Check stock availability
+      for (const item of cartItems) {
+        if (item.quantity > item.artwork.stock_quantity) {
+          toast({
+            title: "Insufficient Stock",
+            description: `Only ${item.artwork.stock_quantity} available for "${item.artwork.title}"`,
+            variant: "destructive",
+          });
+          return;
+        }
+        if (item.artwork.stock_quantity <= 0) {
+          toast({
+            title: "Out of Stock",
+            description: `"${item.artwork.title}" is out of stock`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      // Create orders and decrement stock
       const orders = cartItems.map(item => ({
         buyer_id: userId,
         artwork_id: item.artwork.id,
@@ -111,6 +133,17 @@ const Cart = () => {
 
       if (orderError) throw orderError;
 
+      // Decrement stock for each artwork
+      for (const item of cartItems) {
+        const newStock = item.artwork.stock_quantity - item.quantity;
+        const { error: stockError } = await supabase
+          .from('artworks')
+          .update({ stock_quantity: newStock })
+          .eq('id', item.artwork.id);
+
+        if (stockError) throw stockError;
+      }
+
       // Clear cart
       const { error: deleteError } = await supabase
         .from('cart_items')
@@ -124,7 +157,7 @@ const Cart = () => {
         description: "Order placed successfully",
       });
       
-      fetchCartItems(userId);
+      navigate('/orders');
     } catch (error) {
       toast({
         title: "Error",
@@ -174,6 +207,11 @@ const Cart = () => {
                         <h3 className="font-semibold">{item.artwork.title}</h3>
                         <p className="text-sm text-muted-foreground">
                           Quantity: {item.quantity}
+                        </p>
+                        <p className={`text-xs ${item.artwork.stock_quantity < item.quantity ? 'text-destructive' : 'text-muted-foreground'}`}>
+                          {item.artwork.stock_quantity > 0 
+                            ? `${item.artwork.stock_quantity} available` 
+                            : 'Out of stock'}
                         </p>
                       </div>
                       <p className="font-bold text-primary">₹{item.artwork.price.toFixed(2)}</p>

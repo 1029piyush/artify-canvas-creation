@@ -24,6 +24,7 @@ export type Database = {
           image_url: string
           is_available: boolean | null
           price: number
+          stock_quantity: number
           title: string
           updated_at: string | null
         }
@@ -36,6 +37,7 @@ export type Database = {
           image_url: string
           is_available?: boolean | null
           price: number
+          stock_quantity?: number
           title: string
           updated_at?: string | null
         }
@@ -48,6 +50,7 @@ export type Database = {
           image_url?: string
           is_available?: boolean | null
           price?: number
+          stock_quantity?: number
           title?: string
           updated_at?: string | null
         }
