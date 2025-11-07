@@ -6,11 +6,12 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 import { z } from "zod";
-import { Mail } from "lucide-react";
+import { Mail, Shield } from "lucide-react";
 
 const signUpSchema = z.object({
   email: z.string().email("Invalid email address").refine(
@@ -33,7 +34,8 @@ const Auth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [linkSent, setLinkSent] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState("");
   const [formData, setFormData] = useState({
     email: "",
     fullName: "",
@@ -57,76 +59,35 @@ const Auth = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const handleSignIn = async (e: React.FormEvent) => {
+  const handleSendOTP = async (e: React.FormEvent, isSignUp: boolean = false) => {
     e.preventDefault();
     
     try {
-      signInSchema.parse({ email: formData.email });
-      setLoading(true);
-
-      const redirectUrl = `${window.location.origin}/`;
-
-      const { error } = await supabase.auth.signInWithOtp({
-        email: formData.email,
-        options: {
-          shouldCreateUser: false,
-          emailRedirectTo: redirectUrl,
-        },
-      });
-
-      if (error) throw error;
-
-      setLinkSent(true);
-      toast({
-        title: "Magic Link Sent!",
-        description: "Check your email for the sign-in link.",
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        toast({
-          title: "Validation Error",
-          description: error.errors[0].message,
-          variant: "destructive",
-        });
-      } else if (error instanceof Error) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
+      if (isSignUp) {
+        signUpSchema.parse(formData);
+      } else {
+        signInSchema.parse({ email: formData.email });
       }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      signUpSchema.parse(formData);
+      
       setLoading(true);
-
-      const redirectUrl = `${window.location.origin}/`;
 
       const { error } = await supabase.auth.signInWithOtp({
         email: formData.email,
         options: {
-          shouldCreateUser: true,
-          emailRedirectTo: redirectUrl,
-          data: {
+          shouldCreateUser: isSignUp,
+          data: isSignUp ? {
             full_name: formData.fullName,
             user_type: formData.userType,
-          },
+          } : undefined,
         },
       });
 
       if (error) throw error;
 
-      setLinkSent(true);
+      setOtpSent(true);
       toast({
-        title: "Magic Link Sent!",
-        description: "Check your email for the sign-up link to complete registration.",
+        title: "OTP Sent!",
+        description: "Check your email for the verification code.",
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -146,6 +107,40 @@ const Auth = () => {
       setLoading(false);
     }
   };
+
+  const handleVerifyOTP = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    try {
+      setLoading(true);
+
+      const { error } = await supabase.auth.verifyOtp({
+        email: formData.email,
+        token: otp,
+        type: 'email',
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success!",
+        description: "You have been signed in successfully.",
+      });
+      
+      navigate('/');
+    } catch (error) {
+      if (error instanceof Error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[image:var(--gradient-hero)] p-4 animate-fade-in">
@@ -169,8 +164,8 @@ const Auth = () => {
             </TabsList>
             
             <TabsContent value="signin">
-              {!linkSent ? (
-                <form onSubmit={handleSignIn} className="space-y-4">
+              {!otpSent ? (
+                <form onSubmit={(e) => handleSendOTP(e, false)} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signin-email">Email</Label>
                     <Input
@@ -185,38 +180,53 @@ const Auth = () => {
                   </div>
                   <Button type="submit" className="w-full bg-[image:var(--gradient-primary)] hover:opacity-90 transition-all duration-300 shadow-[var(--shadow-card)]" disabled={loading}>
                     <Mail className="mr-2 h-4 w-4" />
-                    {loading ? "Sending..." : "Send Magic Link"}
+                    {loading ? "Sending..." : "Send OTP"}
                   </Button>
                 </form>
               ) : (
-                <div className="text-center space-y-4 py-4">
-                  <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                    <Mail className="h-8 w-8 text-primary" />
+                <form onSubmit={handleVerifyOTP} className="space-y-4 py-4">
+                  <div className="text-center space-y-4">
+                    <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                      <Mail className="h-8 w-8 text-primary" />
+                    </div>
+                    <h3 className="font-semibold text-lg">Enter OTP</h3>
+                    <p className="text-sm text-muted-foreground">
+                      We sent a code to <span className="font-medium text-foreground">{formData.email}</span>
+                    </p>
                   </div>
-                  <h3 className="font-semibold text-lg">Check your email</h3>
-                  <p className="text-sm text-muted-foreground">
-                    We sent a magic link to <span className="font-medium text-foreground">{formData.email}</span>
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Click the link in the email to sign in.
-                  </p>
+                  <div className="flex justify-center">
+                    <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} />
+                        <InputOTPSlot index={1} />
+                        <InputOTPSlot index={2} />
+                        <InputOTPSlot index={3} />
+                        <InputOTPSlot index={4} />
+                        <InputOTPSlot index={5} />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+                  <Button type="submit" className="w-full bg-[image:var(--gradient-primary)] hover:opacity-90" disabled={loading || otp.length !== 6}>
+                    {loading ? "Verifying..." : "Verify OTP"}
+                  </Button>
                   <Button 
                     variant="ghost" 
-                    className="w-full mt-4"
+                    type="button"
+                    className="w-full"
                     onClick={() => {
-                      setLinkSent(false);
-                      setFormData({ ...formData, email: "" });
+                      setOtpSent(false);
+                      setOtp("");
                     }}
                   >
                     Use a different email
                   </Button>
-                </div>
+                </form>
               )}
             </TabsContent>
             
             <TabsContent value="signup">
-              {!linkSent ? (
-                <form onSubmit={handleSignUp} className="space-y-4">
+              {!otpSent ? (
+                <form onSubmit={(e) => handleSendOTP(e, true)} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="signup-name">Full Name</Label>
                     <Input
@@ -263,32 +273,48 @@ const Auth = () => {
                   </div>
                   <Button type="submit" className="w-full bg-[image:var(--gradient-primary)] hover:opacity-90 transition-all duration-300 shadow-[var(--shadow-card)]" disabled={loading}>
                     <Mail className="mr-2 h-4 w-4" />
-                    {loading ? "Sending..." : "Send Magic Link"}
+                    {loading ? "Sending..." : "Send OTP"}
                   </Button>
                 </form>
               ) : (
-                <div className="text-center space-y-4 py-4">
-                  <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                    <Mail className="h-8 w-8 text-primary" />
+                <form onSubmit={handleVerifyOTP} className="space-y-4 py-4">
+                  <div className="text-center space-y-4">
+                    <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+                      <Mail className="h-8 w-8 text-primary" />
+                    </div>
+                    <h3 className="font-semibold text-lg">Enter OTP</h3>
+                    <p className="text-sm text-muted-foreground">
+                      We sent a code to <span className="font-medium text-foreground">{formData.email}</span>
+                    </p>
                   </div>
-                  <h3 className="font-semibold text-lg">Check your email</h3>
-                  <p className="text-sm text-muted-foreground">
-                    We sent a magic link to <span className="font-medium text-foreground">{formData.email}</span>
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    Click the link in the email to complete your registration.
-                  </p>
+                  <div className="flex justify-center">
+                    <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                      <InputOTPGroup>
+                        <InputOTPSlot index={0} />
+                        <InputOTPSlot index={1} />
+                        <InputOTPSlot index={2} />
+                        <InputOTPSlot index={3} />
+                        <InputOTPSlot index={4} />
+                        <InputOTPSlot index={5} />
+                      </InputOTPGroup>
+                    </InputOTP>
+                  </div>
+                  <Button type="submit" className="w-full bg-[image:var(--gradient-primary)] hover:opacity-90" disabled={loading || otp.length !== 6}>
+                    {loading ? "Verifying..." : "Verify & Create Account"}
+                  </Button>
                   <Button 
                     variant="ghost" 
-                    className="w-full mt-4"
+                    type="button"
+                    className="w-full"
                     onClick={() => {
-                      setLinkSent(false);
+                      setOtpSent(false);
+                      setOtp("");
                       setFormData({ email: "", fullName: "", userType: "buyer" });
                     }}
                   >
                     Use a different email
                   </Button>
-                </div>
+                </form>
               )}
             </TabsContent>
           </Tabs>

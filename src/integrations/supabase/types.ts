@@ -124,13 +124,63 @@ export type Database = {
         }
         Relationships: []
       }
+      delivery_addresses: {
+        Row: {
+          address_line1: string
+          address_line2: string | null
+          city: string
+          country: string
+          created_at: string | null
+          full_name: string
+          id: string
+          is_default: boolean | null
+          phone: string
+          postal_code: string
+          state: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          address_line1: string
+          address_line2?: string | null
+          city: string
+          country?: string
+          created_at?: string | null
+          full_name: string
+          id?: string
+          is_default?: boolean | null
+          phone: string
+          postal_code: string
+          state: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          address_line1?: string
+          address_line2?: string | null
+          city?: string
+          country?: string
+          created_at?: string | null
+          full_name?: string
+          id?: string
+          is_default?: boolean | null
+          phone?: string
+          postal_code?: string
+          state?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       orders: {
         Row: {
           artist_id: string
           artwork_id: string
           buyer_id: string
           created_at: string | null
+          delivery_address_id: string | null
           id: string
+          payment_amount: number | null
           quantity: number | null
           status: string | null
           total_price: number
@@ -140,7 +190,9 @@ export type Database = {
           artwork_id: string
           buyer_id: string
           created_at?: string | null
+          delivery_address_id?: string | null
           id?: string
+          payment_amount?: number | null
           quantity?: number | null
           status?: string | null
           total_price: number
@@ -150,7 +202,9 @@ export type Database = {
           artwork_id?: string
           buyer_id?: string
           created_at?: string | null
+          delivery_address_id?: string | null
           id?: string
+          payment_amount?: number | null
           quantity?: number | null
           status?: string | null
           total_price?: number
@@ -161,6 +215,13 @@ export type Database = {
             columns: ["artwork_id"]
             isOneToOne: false
             referencedRelation: "artworks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_delivery_address_id_fkey"
+            columns: ["delivery_address_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_addresses"
             referencedColumns: ["id"]
           },
         ]
@@ -192,15 +253,42 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "buyer" | "artist"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -327,6 +415,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "buyer", "artist"],
+    },
   },
 } as const

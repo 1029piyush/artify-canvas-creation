@@ -3,9 +3,12 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, ShoppingBag } from "lucide-react";
+import { Trash2, ShoppingBag, Plus } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 interface CartItem {
   id: string;
@@ -20,12 +23,38 @@ interface CartItem {
   };
 }
 
+interface DeliveryAddress {
+  id: string;
+  full_name: string;
+  phone: string;
+  address_line1: string;
+  address_line2?: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  is_default: boolean;
+}
+
 const Cart = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [addresses, setAddresses] = useState<DeliveryAddress[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
+  const [showAddressDialog, setShowAddressDialog] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [addressForm, setAddressForm] = useState({
+    full_name: "",
+    phone: "",
+    address_line1: "",
+    address_line2: "",
+    city: "",
+    state: "",
+    postal_code: "",
+    country: "India",
+  });
 
   useEffect(() => {
     checkAuth();
@@ -67,6 +96,21 @@ const Cart = () => {
     } else {
       setCartItems(data as CartItem[]);
     }
+
+    // Fetch addresses
+    const { data: addressData, error: addressError } = await supabase
+      .from('delivery_addresses')
+      .select('*')
+      .eq('user_id', uid);
+
+    if (!addressError && addressData) {
+      setAddresses(addressData);
+      const defaultAddress = addressData.find(addr => addr.is_default);
+      if (defaultAddress) {
+        setSelectedAddress(defaultAddress.id);
+      }
+    }
+
     setLoading(false);
   };
 
@@ -93,8 +137,54 @@ const Cart = () => {
     }
   };
 
+
+  const handleSaveAddress = async () => {
+    if (!userId) return;
+
+    try {
+      const { error } = await supabase
+        .from('delivery_addresses')
+        .insert([{ ...addressForm, user_id: userId }]);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Address saved successfully",
+      });
+
+      setShowAddressDialog(false);
+      setAddressForm({
+        full_name: "",
+        phone: "",
+        address_line1: "",
+        address_line2: "",
+        city: "",
+        state: "",
+        postal_code: "",
+        country: "India",
+      });
+      fetchCartItems(userId);
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save address",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleCheckout = async () => {
     if (!userId || cartItems.length === 0) return;
+
+    if (!selectedAddress) {
+      toast({
+        title: "Address Required",
+        description: "Please select a delivery address",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       // Check stock availability
@@ -117,6 +207,9 @@ const Cart = () => {
         }
       }
 
+      // Calculate 70% payment amount
+      const paymentAmount = total * 0.7;
+
       // Create orders and decrement stock
       const orders = cartItems.map(item => ({
         buyer_id: userId,
@@ -124,6 +217,8 @@ const Cart = () => {
         artist_id: item.artwork.artist_id,
         quantity: item.quantity,
         total_price: item.artwork.price * item.quantity,
+        payment_amount: (item.artwork.price * item.quantity) * 0.7,
+        delivery_address_id: selectedAddress,
         status: 'pending'
       }));
 
@@ -167,7 +262,9 @@ const Cart = () => {
     }
   };
 
+
   const total = cartItems.reduce((sum, item) => sum + (item.artwork.price * item.quantity), 0);
+  const paymentAmount = total * 0.7;
 
   return (
     <div className="min-h-screen bg-background">
@@ -228,7 +325,112 @@ const Cart = () => {
               ))}
             </div>
 
-            <div className="lg:col-span-1">
+            <div className="lg:col-span-1 space-y-4">
+              <Card>
+                <CardContent className="p-6 space-y-4">
+                  <h2 className="text-xl font-bold">Delivery Address</h2>
+                  {addresses.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No saved addresses</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {addresses.map((address) => (
+                        <div
+                          key={address.id}
+                          className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                            selectedAddress === address.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                          }`}
+                          onClick={() => setSelectedAddress(address.id)}
+                        >
+                          <p className="font-semibold">{address.full_name}</p>
+                          <p className="text-sm">{address.phone}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {address.address_line1}, {address.city}, {address.state} - {address.postal_code}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Dialog open={showAddressDialog} onOpenChange={setShowAddressDialog}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" className="w-full">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add New Address
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Add Delivery Address</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Full Name</Label>
+                            <Input
+                              value={addressForm.full_name}
+                              onChange={(e) => setAddressForm({...addressForm, full_name: e.target.value})}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Phone</Label>
+                            <Input
+                              value={addressForm.phone}
+                              onChange={(e) => setAddressForm({...addressForm, phone: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Address Line 1</Label>
+                          <Input
+                            value={addressForm.address_line1}
+                            onChange={(e) => setAddressForm({...addressForm, address_line1: e.target.value})}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Address Line 2 (Optional)</Label>
+                          <Input
+                            value={addressForm.address_line2}
+                            onChange={(e) => setAddressForm({...addressForm, address_line2: e.target.value})}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>City</Label>
+                            <Input
+                              value={addressForm.city}
+                              onChange={(e) => setAddressForm({...addressForm, city: e.target.value})}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>State</Label>
+                            <Input
+                              value={addressForm.state}
+                              onChange={(e) => setAddressForm({...addressForm, state: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Postal Code</Label>
+                            <Input
+                              value={addressForm.postal_code}
+                              onChange={(e) => setAddressForm({...addressForm, postal_code: e.target.value})}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Country</Label>
+                            <Input
+                              value={addressForm.country}
+                              onChange={(e) => setAddressForm({...addressForm, country: e.target.value})}
+                            />
+                          </div>
+                        </div>
+                        <Button onClick={handleSaveAddress} className="w-full">Save Address</Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </CardContent>
+              </Card>
+
               <Card className="sticky top-20">
                 <CardContent className="p-6 space-y-4">
                   <h2 className="text-xl font-bold">Order Summary</h2>
@@ -237,15 +439,27 @@ const Cart = () => {
                       <span className="text-muted-foreground">Items ({cartItems.length})</span>
                       <span>₹{total.toFixed(2)}</span>
                     </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Total Amount</span>
+                      <span>₹{total.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between font-semibold text-primary">
+                      <span>To Pay Now (70%)</span>
+                      <span>₹{paymentAmount.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Remaining (30%)</span>
+                      <span>₹{(total - paymentAmount).toFixed(2)}</span>
+                    </div>
                     <div className="border-t pt-2">
                       <div className="flex justify-between font-bold text-lg">
-                        <span>Total</span>
-                        <span className="text-primary">₹{total.toFixed(2)}</span>
+                        <span>Payment Amount</span>
+                        <span className="text-primary">₹{paymentAmount.toFixed(2)}</span>
                       </div>
                     </div>
                   </div>
-                  <Button className="w-full" onClick={handleCheckout}>
-                    Proceed to Checkout
+                  <Button className="w-full" onClick={handleCheckout} disabled={!selectedAddress}>
+                    Buy Now - Pay ₹{paymentAmount.toFixed(2)}
                   </Button>
                 </CardContent>
               </Card>
