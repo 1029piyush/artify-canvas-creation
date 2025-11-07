@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
@@ -13,15 +13,15 @@ import { Shield } from "lucide-react";
 
 const adminSignInSchema = z.object({
   email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 const AdminAuth = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
     const checkAdminAccess = async () => {
@@ -67,27 +67,19 @@ const AdminAuth = () => {
     return () => subscription.unsubscribe();
   }, [navigate, toast]);
 
-  const handleSendOTP = async (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
-      adminSignInSchema.parse({ email });
+      adminSignInSchema.parse({ email, password });
       setLoading(true);
 
-      const { error } = await supabase.auth.signInWithOtp({
+      const { error } = await supabase.auth.signInWithPassword({
         email,
-        options: {
-          shouldCreateUser: false,
-        },
+        password,
       });
 
       if (error) throw error;
-
-      setOtpSent(true);
-      toast({
-        title: "OTP Sent!",
-        description: "Check your email for the verification code.",
-      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         toast({
@@ -96,32 +88,6 @@ const AdminAuth = () => {
           variant: "destructive",
         });
       } else if (error instanceof Error) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOTP = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    try {
-      setLoading(true);
-
-      const { error } = await supabase.auth.verifyOtp({
-        email,
-        token: otp,
-        type: 'email',
-      });
-
-      if (error) throw error;
-    } catch (error) {
-      if (error instanceof Error) {
         toast({
           title: "Error",
           description: error.message,
@@ -147,64 +113,36 @@ const AdminAuth = () => {
           <CardDescription>Secure authentication for administrators</CardDescription>
         </CardHeader>
         <CardContent>
-          {!otpSent ? (
-            <form onSubmit={handleSendOTP} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="admin-email">Admin Email</Label>
-                <Input
-                  id="admin-email"
-                  type="email"
-                  placeholder="admin@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="border-border/50 focus:border-primary transition-colors"
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full bg-[image:var(--gradient-primary)] hover:opacity-90 transition-all duration-300 shadow-[var(--shadow-card)]" disabled={loading}>
-                <Shield className="mr-2 h-4 w-4" />
-                {loading ? "Sending..." : "Send OTP"}
-              </Button>
-            </form>
-          ) : (
-            <form onSubmit={handleVerifyOTP} className="space-y-4 py-4">
-              <div className="text-center space-y-4">
-                <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                  <Shield className="h-8 w-8 text-primary" />
-                </div>
-                <h3 className="font-semibold text-lg">Enter OTP</h3>
-                <p className="text-sm text-muted-foreground">
-                  We sent a code to <span className="font-medium text-foreground">{email}</span>
-                </p>
-              </div>
-              <div className="flex justify-center">
-                <InputOTP maxLength={6} value={otp} onChange={setOtp}>
-                  <InputOTPGroup>
-                    <InputOTPSlot index={0} />
-                    <InputOTPSlot index={1} />
-                    <InputOTPSlot index={2} />
-                    <InputOTPSlot index={3} />
-                    <InputOTPSlot index={4} />
-                    <InputOTPSlot index={5} />
-                  </InputOTPGroup>
-                </InputOTP>
-              </div>
-              <Button type="submit" className="w-full bg-[image:var(--gradient-primary)] hover:opacity-90" disabled={loading || otp.length !== 6}>
-                {loading ? "Verifying..." : "Verify & Sign In"}
-              </Button>
-              <Button 
-                variant="ghost" 
-                type="button"
-                className="w-full"
-                onClick={() => {
-                  setOtpSent(false);
-                  setOtp("");
-                }}
-              >
-                Use a different email
-              </Button>
-            </form>
-          )}
+          <form onSubmit={handleSignIn} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="admin-email">Admin Email</Label>
+              <Input
+                id="admin-email"
+                type="email"
+                placeholder="admin@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="border-border/50 focus:border-primary transition-colors"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="admin-password">Password</Label>
+              <Input
+                id="admin-password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="border-border/50 focus:border-primary transition-colors"
+                required
+              />
+            </div>
+            <Button type="submit" className="w-full bg-[image:var(--gradient-primary)] hover:opacity-90 transition-all duration-300 shadow-[var(--shadow-card)]" disabled={loading}>
+              <Shield className="mr-2 h-4 w-4" />
+              {loading ? "Signing in..." : "Sign In"}
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>
