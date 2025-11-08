@@ -81,6 +81,60 @@ const ArtworkCard = ({ id, title, description, price, imageUrl, artistId, stockQ
     }
   };
 
+  const handleBuyNow = async () => {
+    if (!isAuthenticated) {
+      toast({
+        title: "Sign in required",
+        description: "Please sign in to buy artwork",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (userId === artistId) {
+      toast({
+        title: "Cannot purchase",
+        description: "You cannot buy your own artwork",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (stockQuantity <= 0) {
+      toast({
+        title: "Out of stock",
+        description: "This artwork is currently unavailable",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          buyer_id: userId!,
+          artist_id: artistId,
+          artwork_id: id,
+          quantity: 1,
+          total_price: price,
+          status: 'pending',
+        })
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      window.location.href = `/payment?orderId=${orderData.id}&amount=${price}`;
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create order",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <Card className="group overflow-hidden transition-all duration-300 hover:shadow-[var(--shadow-hover)]">
       <CardContent className="p-0">
@@ -105,14 +159,26 @@ const ArtworkCard = ({ id, title, description, price, imageUrl, artistId, stockQ
             </p>
           </div>
         </div>
-        <Button 
-          className="w-full" 
-          onClick={handleAddToCart}
-          disabled={userId === artistId || stockQuantity <= 0}
-        >
-          <ShoppingCart className="mr-2 h-4 w-4" />
-          {stockQuantity <= 0 ? 'Out of Stock' : 'Add to Cart'}
-        </Button>
+        {userId === artistId ? (
+          <p className="text-sm text-muted-foreground w-full text-center">Your artwork</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 w-full">
+            <Button 
+              variant="outline"
+              onClick={handleAddToCart}
+              disabled={stockQuantity <= 0}
+            >
+              <ShoppingCart className="mr-2 h-4 w-4" />
+              Add to Cart
+            </Button>
+            <Button 
+              onClick={handleBuyNow}
+              disabled={stockQuantity <= 0}
+            >
+              Buy Now
+            </Button>
+          </div>
+        )}
       </CardFooter>
     </Card>
   );

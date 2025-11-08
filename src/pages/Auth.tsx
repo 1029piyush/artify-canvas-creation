@@ -253,6 +253,15 @@ const Auth = () => {
               </form>
             </TabsContent>
           </Tabs>
+
+          <div className="mt-4 text-center border-t pt-4">
+            <Link 
+              to="/admin-auth"
+              className="text-sm text-muted-foreground hover:text-primary transition-colors"
+            >
+              Admin Sign In →
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>

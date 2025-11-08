@@ -11,6 +11,8 @@ import Cart from "./pages/Cart";
 import Orders from "./pages/Orders";
 import CustomArt from "./pages/CustomArt";
 import ArtistDashboard from "./pages/ArtistDashboard";
+import BuyerRequests from "./pages/BuyerRequests";
+import Payment from "./pages/Payment";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
@@ -31,6 +33,8 @@ const App = () => (
           <Route path="/orders" element={<Orders />} />
           <Route path="/custom-art" element={<CustomArt />} />
           <Route path="/artist-dashboard" element={<ArtistDashboard />} />
+          <Route path="/buyer-requests" element={<BuyerRequests />} />
+          <Route path="/payment" element={<Payment />} />
           <Route path="/profile" element={<Profile />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

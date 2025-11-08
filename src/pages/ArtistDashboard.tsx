@@ -49,6 +49,7 @@ interface CustomRequest {
   budget: number | null;
   status: string;
   created_at: string;
+  artist_id: string | null;
   buyer: {
     email: string;
     full_name: string | null;
@@ -149,7 +150,8 @@ const ArtistDashboard = () => {
         budget,
         status,
         created_at,
-        buyer_id
+        buyer_id,
+        artist_id
       `)
       .order('created_at', { ascending: false });
 
@@ -167,6 +169,27 @@ const ArtistDashboard = () => {
       }));
 
       setCustomRequests(requestsWithBuyers as CustomRequest[]);
+    }
+  };
+
+  const handleClaimRequest = async (requestId: string) => {
+    const { error } = await supabase
+      .from('custom_requests')
+      .update({ artist_id: userId, status: 'accepted' })
+      .eq('id', requestId);
+
+    if (error) {
+      toast({
+        title: "Error",
+        description: "Failed to claim request",
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: "Success",
+        description: "Request claimed successfully",
+      });
+      fetchCustomRequests();
     }
   };
 
@@ -495,6 +518,20 @@ const ArtistDashboard = () => {
                     <p className="text-xs text-muted-foreground pt-2">
                       Requested on {new Date(request.created_at).toLocaleDateString()}
                     </p>
+
+                    {request.status === 'pending' && !request.artist_id && (
+                      <Button 
+                        onClick={() => handleClaimRequest(request.id)}
+                        className="w-full mt-4"
+                      >
+                        Accept & Claim Request
+                      </Button>
+                    )}
+                    {request.artist_id === userId && (
+                      <div className="mt-4 p-3 bg-primary/10 rounded-lg">
+                        <p className="text-sm font-medium text-primary">You claimed this request</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
