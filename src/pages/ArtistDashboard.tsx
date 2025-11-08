@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Trash2, Package } from "lucide-react";
+import { Upload, Trash2, Package, MessageSquare } from "lucide-react";
 import { z } from "zod";
 
 const artworkSchema = z.object({
@@ -42,6 +42,19 @@ interface Order {
   };
 }
 
+interface CustomRequest {
+  id: string;
+  title: string;
+  description: string;
+  budget: number | null;
+  status: string;
+  created_at: string;
+  buyer: {
+    email: string;
+    full_name: string | null;
+  };
+}
+
 const ArtistDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -49,6 +62,7 @@ const ArtistDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [customRequests, setCustomRequests] = useState<CustomRequest[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
     title: "",
@@ -88,6 +102,7 @@ const ArtistDashboard = () => {
     setUserId(session.user.id);
     fetchArtworks(session.user.id);
     fetchOrders(session.user.id);
+    fetchCustomRequests();
   };
 
   const fetchArtworks = async (uid: string) => {
@@ -121,6 +136,37 @@ const ArtistDashboard = () => {
 
     if (data) {
       setOrders(data as Order[]);
+    }
+  };
+
+  const fetchCustomRequests = async () => {
+    const { data } = await supabase
+      .from('custom_requests')
+      .select(`
+        id,
+        title,
+        description,
+        budget,
+        status,
+        created_at,
+        buyer_id
+      `)
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      // Fetch buyer profiles separately
+      const buyerIds = data.map(req => req.buyer_id);
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, email, full_name')
+        .in('id', buyerIds);
+
+      const requestsWithBuyers = data.map(req => ({
+        ...req,
+        buyer: profiles?.find(p => p.id === req.buyer_id) || { email: 'Unknown', full_name: null }
+      }));
+
+      setCustomRequests(requestsWithBuyers as CustomRequest[]);
     }
   };
 
@@ -240,6 +286,7 @@ const ArtistDashboard = () => {
             <TabsTrigger value="upload">Upload Artwork</TabsTrigger>
             <TabsTrigger value="artworks">My Artworks</TabsTrigger>
             <TabsTrigger value="orders">Orders</TabsTrigger>
+            <TabsTrigger value="custom-requests">Custom Requests</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upload">
@@ -407,6 +454,54 @@ const ArtistDashboard = () => {
                 <Card>
                   <CardContent className="py-12 text-center">
                     <p className="text-muted-foreground">No orders yet</p>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="custom-requests">
+            <div className="space-y-4">
+              {customRequests.map((request) => (
+                <Card key={request.id}>
+                  <CardContent className="p-6 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-3">
+                        <MessageSquare className="h-6 w-6 text-primary mt-1" />
+                        <div className="space-y-1">
+                          <h3 className="font-semibold text-lg">{request.title}</h3>
+                          <p className="text-sm text-muted-foreground">{request.description}</p>
+                        </div>
+                      </div>
+                      <span className="text-xs px-3 py-1 rounded-full bg-secondary capitalize">
+                        {request.status}
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4 pt-3 border-t">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Requested by</p>
+                        <p className="font-medium">{request.buyer.full_name || 'Unknown'}</p>
+                        <p className="text-sm text-muted-foreground">{request.buyer.email}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Budget</p>
+                        <p className="font-bold text-primary">
+                          {request.budget ? `₹${request.budget.toFixed(2)}` : 'Not specified'}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <p className="text-xs text-muted-foreground pt-2">
+                      Requested on {new Date(request.created_at).toLocaleDateString()}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+              {customRequests.length === 0 && (
+                <Card>
+                  <CardContent className="py-12 text-center">
+                    <p className="text-muted-foreground">No custom requests yet</p>
                   </CardContent>
                 </Card>
               )}
