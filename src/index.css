@@ -2,9 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* ===========================================================
+   🌈 Artify Complete Design System + Lightbox UI Theme
+   =========================================================== */
 
 @layer base {
   :root {
@@ -17,11 +17,11 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* Artify Brand Colors - Vibrant & Bold */
+    /* Artify Brand Colors */
     --primary: 262 83% 58%;
     --primary-foreground: 0 0% 100%;
     --primary-glow: 262 83% 68%;
-    
+
     --secondary: 173 80% 40%;
     --secondary-foreground: 0 0% 100%;
     --secondary-glow: 173 80% 50%;
@@ -42,7 +42,7 @@ All colors MUST be HSL.
 
     --radius: 1rem;
 
-    /* Artify Gradients - More Dynamic */
+    /* Gradients */
     --gradient-primary: linear-gradient(135deg, hsl(262 83% 58%), hsl(262 83% 68%));
     --gradient-secondary: linear-gradient(135deg, hsl(173 80% 40%), hsl(173 80% 50%));
     --gradient-artify: linear-gradient(135deg, hsl(262 83% 58%) 0%, hsl(173 80% 40%) 50%, hsl(45 93% 58%) 100%);
@@ -50,7 +50,7 @@ All colors MUST be HSL.
     --gradient-card: linear-gradient(135deg, hsl(0 0% 100%), hsl(262 83% 98%));
     --gradient-vibrant: linear-gradient(135deg, hsl(340 80% 55%), hsl(262 83% 58%), hsl(173 80% 40%));
 
-    /* Shadows - Enhanced */
+    /* Shadows */
     --shadow-artwork: 0 10px 40px -10px hsl(262 83% 58% / 0.3);
     --shadow-card: 0 4px 20px -2px hsl(262 83% 58% / 0.15);
     --shadow-hover: 0 20px 60px -10px hsl(262 83% 58% / 0.4);
@@ -105,14 +105,71 @@ All colors MUST be HSL.
     --shadow-hover: 0 20px 60px -10px hsl(262 83% 65% / 0.5);
     --shadow-glow: 0 0 40px hsl(262 83% 75% / 0.4);
   }
-}
 
-@layer base {
   * {
     @apply border-border;
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased transition-colors duration-500;
+  }
+}
+
+/* ===========================================================
+   🪞 Lightbox + Glow UI Components
+   =========================================================== */
+@layer components {
+  /* Navbar */
+  nav {
+    @apply sticky top-0 z-50 bg-white/70 dark:bg-background/80 backdrop-blur-xl border-b border-white/20 shadow-sm;
+  }
+
+  /* Logo */
+  .logo {
+    @apply relative font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary tracking-tight;
+  }
+
+  .logo::after {
+    content: "";
+    @apply absolute left-0 -bottom-1 w-full h-0.5 bg-gradient-to-r from-primary via-secondary to-accent transform scale-x-0 transition-transform duration-300;
+  }
+
+  .logo:hover::after {
+    transform: scaleX(1);
+  }
+
+  /* Lightbox Card */
+  .card {
+    @apply bg-white/80 dark:bg-background/60 backdrop-blur-md rounded-2xl border border-white/20 shadow-[0_4px_20px_-2px_hsl(var(--primary)/0.15)] transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_20px_60px_-10px_hsl(var(--primary)/0.4)];
+  }
+
+  /* Button Glow */
+  .btn-glow {
+    @apply relative overflow-hidden transition-all duration-300 bg-gradient-to-r from-primary to-secondary text-white font-medium rounded-xl shadow-md;
+  }
+
+  .btn-glow:hover {
+    @apply scale-[1.03] shadow-[0_0_20px_hsl(var(--primary-glow)/0.6)];
+  }
+
+  /* Background */
+  .artify-bg {
+    @apply min-h-screen bg-gradient-to-br from-rose-50 via-orange-50 to-amber-50 dark:from-background dark:via-background dark:to-background;
+  }
+
+  /* Animation */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .fade-in {
+    animation: fadeIn 0.6s ease-in-out;
   }
 }

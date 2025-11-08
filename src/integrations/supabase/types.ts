@@ -172,6 +172,36 @@ export type Database = {
         }
         Relationships: []
       }
+      artist_bank_details: {
+        Row: {
+          user_id: string
+          bank_name: string
+          account_holder_name: string
+          account_number: string
+          ifsc_code: string
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          user_id: string
+          bank_name: string
+          account_holder_name: string
+          account_number: string
+          ifsc_code: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          user_id?: string
+          bank_name?: string
+          account_holder_name?: string
+          account_number?: string
+          ifsc_code?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       orders: {
         Row: {
           artist_id: string
@@ -444,7 +474,7 @@ export type Enums<
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never

@@ -53,8 +53,17 @@ const Index = () => {
               Connect with talented artists and find the perfect piece for your collection
             </p>
             <div className="flex flex-wrap justify-center gap-4">
-              <Button asChild size="lg" className="shadow-[var(--shadow-artwork)]">
-                <Link to="/auth">Start Exploring</Link>
+              <Button 
+                size="lg" 
+                className="shadow-[var(--shadow-artwork)]"
+                onClick={() => {
+                  document.getElementById('featured-artworks')?.scrollIntoView({ 
+                    behavior: 'smooth',
+                    block: 'start'
+                  });
+                }}
+              >
+                Start Exploring
               </Button>
               <Button asChild size="lg" variant="outline">
                 <Link to="/custom-art">Request Custom Art</Link>
@@ -100,7 +109,7 @@ const Index = () => {
       </section>
 
       {/* Artworks Gallery */}
-      <section className="py-16">
+      <section id="featured-artworks" className="py-16 scroll-mt-20">
         <div className="container">
           <h2 className="mb-8 text-center text-3xl font-bold">Featured Artworks</h2>
           

@@ -2,14 +2,14 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Trash2, Package, MessageSquare } from "lucide-react";
+import { Upload, Trash2, Package, MessageSquare, Banknote } from "lucide-react";
 import { z } from "zod";
 
 const artworkSchema = z.object({
@@ -18,6 +18,14 @@ const artworkSchema = z.object({
   price: z.number().min(1, "Price must be greater than 0"),
   category: z.string().optional(),
   stock_quantity: z.number().min(1, "Stock must be at least 1").max(10, "Maximum 10 items allowed"),
+});
+
+// NEW SCHEMA for bank details
+const bankDetailsSchema = z.object({
+  bank_name: z.string().min(2, "Bank Name is required"),
+  account_holder_name: z.string().min(2, "Account Holder Name is required"),
+  account_number: z.string().min(8, "Account Number must be at least 8 digits").max(20, "Account Number is too long"),
+  ifsc_code: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, "Invalid IFSC Code format (e.g., SBIN0001234)"),
 });
 
 interface Artwork {
@@ -56,6 +64,14 @@ interface CustomRequest {
   };
 }
 
+// NEW INTERFACE for bank details
+interface BankDetails {
+  bank_name: string;
+  account_holder_name: string;
+  account_number: string;
+  ifsc_code: string;
+}
+
 const ArtistDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -72,6 +88,17 @@ const ArtistDashboard = () => {
     category: "",
     stock_quantity: "1",
   });
+  
+  // NEW STATE for bank details
+  const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
+  const [bankForm, setBankForm] = useState<BankDetails>({
+    bank_name: "",
+    account_holder_name: "",
+    account_number: "",
+    ifsc_code: "",
+  });
+  const [bankLoading, setBankLoading] = useState(false);
+
 
   useEffect(() => {
     checkAuth();
@@ -104,8 +131,85 @@ const ArtistDashboard = () => {
     fetchArtworks(session.user.id);
     fetchOrders(session.user.id);
     fetchCustomRequests();
+    fetchBankDetails(session.user.id); // <-- NEW: Fetch bank details
   };
 
+  // NEW FUNCTION: Fetch artist's bank details
+  const fetchBankDetails = async (uid: string) => {
+    const { data } = await supabase
+      .from('artist_bank_details')
+      .select('*')
+      .eq('user_id', uid)
+      .single();
+
+    if (data) {
+      setBankDetails(data);
+      setBankForm({
+        bank_name: data.bank_name,
+        account_holder_name: data.account_holder_name,
+        account_number: data.account_number,
+        ifsc_code: data.ifsc_code,
+      });
+    } else {
+      setBankDetails(null);
+      // Keep form empty for new input
+    }
+  };
+
+  // NEW FUNCTION: Handle bank form changes
+  const handleBankFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setBankForm({
+      ...bankForm,
+      [e.target.id]: e.target.value,
+    });
+  };
+
+  // NEW FUNCTION: Handle bank form submission
+  const handleBankFormSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+
+    try {
+      const validatedData = bankDetailsSchema.parse(bankForm);
+
+      setBankLoading(true);
+
+      const { error } = await supabase
+        .from('artist_bank_details')
+        .upsert({ 
+          ...validatedData,
+          user_id: userId!,
+        }, {
+          onConflict: 'user_id', // upsert using primary key
+          ignoreDuplicates: false,
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Success!",
+        description: "Bank details saved successfully",
+      });
+      fetchBankDetails(userId);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "Validation Error",
+          description: error.errors[0].message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to save bank details",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setBankLoading(false);
+    }
+  };
+  
   const fetchArtworks = async (uid: string) => {
     const { data } = await supabase
       .from('artworks')
@@ -114,7 +218,7 @@ const ArtistDashboard = () => {
       .order('created_at', { ascending: false });
 
     if (data) {
-      setArtworks(data);
+      setArtworks(data as Artwork[]);
     }
   };
 
@@ -310,6 +414,7 @@ const ArtistDashboard = () => {
             <TabsTrigger value="artworks">My Artworks</TabsTrigger>
             <TabsTrigger value="orders">Orders</TabsTrigger>
             <TabsTrigger value="custom-requests">Custom Requests</TabsTrigger>
+            <TabsTrigger value="bank-details">Bank Details</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upload">
@@ -543,6 +648,80 @@ const ArtistDashboard = () => {
                 </Card>
               )}
             </div>
+          </TabsContent>
+
+          {/* NEW TAB CONTENT: Bank Details */}
+          <TabsContent value="bank-details"> 
+            <Card>
+              <CardHeader>
+                <CardTitle>{bankDetails ? 'Update Bank Details' : 'Add Bank Details'}</CardTitle>
+                <CardDescription>
+                  Your bank details are required to receive payments from art sales. This information is private and secure.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleBankFormSubmit} className="space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="bank_name">Bank Name</Label>
+                    <Input
+                      id="bank_name"
+                      placeholder="e.g., State Bank of India"
+                      value={bankForm.bank_name}
+                      onChange={handleBankFormChange}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="account_holder_name">Account Holder Name</Label>
+                    <Input
+                      id="account_holder_name"
+                      placeholder="Full name as per bank records"
+                      value={bankForm.account_holder_name}
+                      onChange={handleBankFormChange}
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="account_number">Account Number</Label>
+                      <Input
+                        id="account_number"
+                        placeholder="1234567890"
+                        type="text"
+                        value={bankForm.account_number}
+                        onChange={handleBankFormChange}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="ifsc_code">IFSC Code</Label>
+                      <Input
+                        id="ifsc_code"
+                        placeholder="SBIN0001234"
+                        type="text"
+                        value={bankForm.ifsc_code.toUpperCase()}
+                        onChange={handleBankFormChange}
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <Button type="submit" className="w-full" disabled={bankLoading}>
+                    <Banknote className="mr-2 h-4 w-4" />
+                    {bankLoading ? "Saving..." : (bankDetails ? "Update Details" : "Save Details")}
+                  </Button>
+                </form>
+                {bankDetails && (
+                  <div className="mt-6 p-4 bg-secondary/10 border border-secondary/50 rounded-lg">
+                    <h4 className="font-semibold text-base mb-2 text-primary">Your Saved Bank Details:</h4>
+                    <p className="text-sm"><strong>Bank Name:</strong> {bankDetails.bank_name}</p>
+                    <p className="text-sm"><strong>Account Holder:</strong> {bankDetails.account_holder_name}</p>
+                    <p className="text-sm"><strong>Account Number:</strong> {bankDetails.account_number}</p>
+                    <p className="text-sm"><strong>IFSC Code:</strong> {bankDetails.ifsc_code}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

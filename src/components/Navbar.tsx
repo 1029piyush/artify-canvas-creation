@@ -36,11 +36,11 @@ const Navbar = () => {
 
   const fetchUserType = async (userId: string) => {
     const { data } = await supabase
-      .from('profiles')
-      .select('user_type')
-      .eq('id', userId)
+      .from("profiles")
+      .select("user_type")
+      .eq("id", userId)
       .single();
-    
+
     if (data) {
       setUserType(data.user_type);
     }
@@ -63,20 +63,34 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <nav className="sticky top-0 z-50 w-full border-b border-white/20 bg-white/70 backdrop-blur-lg supports-[backdrop-filter]:bg-white/60 shadow-sm">
       <div className="container flex h-16 items-center justify-between">
-        <Link to="/" className="flex items-center gap-2 transition-transform hover:scale-105">
-          <img 
-            src="/src/assets/artify-logo.jpg" 
-            alt="Artify Logo" 
-            className="h-10 w-auto object-contain"
-          />
+        {/* 🌈 Brand Logo Section */}
+        <Link
+          to="/"
+          className="flex items-center gap-2 transition-transform hover:scale-105 group"
+        >
+          <div className="relative flex items-center">
+            {/* Gradient shimmer logo */}
+            <span className="text-3xl font-extrabold bg-gradient-to-r from-indigo-500 via-sky-500 to-amber-400 bg-clip-text text-transparent animate-gradient-x">
+              Artify
+            </span>
+
+            {/* Sparkle icon */}
+            <span className="ml-1 text-lg text-indigo-400 drop-shadow-[0_0_6px_rgba(99,102,241,0.6)] animate-pulse">
+              ✦
+            </span>
+
+            {/* Hover underline */}
+            <span className="absolute -bottom-1 left-0 w-full h-[2px] bg-gradient-to-r from-indigo-400/40 via-sky-400/60 to-amber-300/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></span>
+          </div>
         </Link>
 
+        {/* 🔘 Navigation Buttons */}
         <div className="flex items-center gap-4">
           {user ? (
             <>
-              {userType === 'artist' && (
+              {userType === "artist" && (
                 <Button asChild variant="ghost">
                   <Link to="/artist-dashboard">
                     <Palette className="mr-2 h-4 w-4" />
@@ -84,7 +98,7 @@ const Navbar = () => {
                   </Link>
                 </Button>
               )}
-              
+
               <Button asChild variant="ghost">
                 <Link to="/custom-art">
                   <Palette className="mr-2 h-4 w-4" />
@@ -92,14 +106,14 @@ const Navbar = () => {
                 </Link>
               </Button>
 
-              {userType === 'buyer' && (
+              {userType === "buyer" && (
                 <>
                   <Button asChild variant="ghost" className="relative">
                     <Link to="/cart">
                       <ShoppingCart className="h-5 w-5" />
                     </Link>
                   </Button>
-                  
+
                   <Button asChild variant="ghost">
                     <Link to="/orders">
                       <Package className="mr-2 h-4 w-4" />
