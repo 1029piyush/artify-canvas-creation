@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      artist_bank_details: {
+        Row: {
+          account_holder_name: string
+          account_number: string
+          bank_name: string
+          created_at: string
+          id: string
+          ifsc_code: string
+          updated_at: string
+          upi_id: string | null
+          user_id: string
+        }
+        Insert: {
+          account_holder_name: string
+          account_number: string
+          bank_name: string
+          created_at?: string
+          id?: string
+          ifsc_code: string
+          updated_at?: string
+          upi_id?: string | null
+          user_id: string
+        }
+        Update: {
+          account_holder_name?: string
+          account_number?: string
+          bank_name?: string
+          created_at?: string
+          id?: string
+          ifsc_code?: string
+          updated_at?: string
+          upi_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       artworks: {
         Row: {
           artist_id: string
@@ -172,39 +208,10 @@ export type Database = {
         }
         Relationships: []
       }
-      artist_bank_details: {
-        Row: {
-          user_id: string
-          bank_name: string
-          account_holder_name: string
-          account_number: string
-          ifsc_code: string
-          created_at: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          user_id: string
-          bank_name: string
-          account_holder_name: string
-          account_number: string
-          ifsc_code: string
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          user_id?: string
-          bank_name?: string
-          account_holder_name?: string
-          account_number?: string
-          ifsc_code?: string
-          created_at?: string | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
       orders: {
         Row: {
           artist_id: string
+          artist_notified: boolean | null
           artwork_id: string
           buyer_id: string
           created_at: string | null
@@ -217,6 +224,7 @@ export type Database = {
         }
         Insert: {
           artist_id: string
+          artist_notified?: boolean | null
           artwork_id: string
           buyer_id: string
           created_at?: string | null
@@ -229,6 +237,7 @@ export type Database = {
         }
         Update: {
           artist_id?: string
+          artist_notified?: boolean | null
           artwork_id?: string
           buyer_id?: string
           created_at?: string | null
@@ -270,6 +279,8 @@ export type Database = {
           transaction_id: string | null
           updated_at: string | null
           upi_id: string | null
+          verified_at: string | null
+          verified_by_admin: boolean | null
         }
         Insert: {
           account_holder_name?: string | null
@@ -284,6 +295,8 @@ export type Database = {
           transaction_id?: string | null
           updated_at?: string | null
           upi_id?: string | null
+          verified_at?: string | null
+          verified_by_admin?: boolean | null
         }
         Update: {
           account_holder_name?: string | null
@@ -298,6 +311,8 @@ export type Database = {
           transaction_id?: string | null
           updated_at?: string | null
           upi_id?: string | null
+          verified_at?: string | null
+          verified_by_admin?: boolean | null
         }
         Relationships: [
           {
@@ -474,7 +489,7 @@ export type Enums<
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Enums"][EnumName]
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
     : never

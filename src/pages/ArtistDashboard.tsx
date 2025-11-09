@@ -26,6 +26,7 @@ const bankDetailsSchema = z.object({
   account_holder_name: z.string().min(2, "Account Holder Name is required"),
   account_number: z.string().min(8, "Account Number must be at least 8 digits").max(20, "Account Number is too long"),
   ifsc_code: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, "Invalid IFSC Code format (e.g., SBIN0001234)"),
+  upi_id: z.string().optional(),
 });
 
 interface Artwork {
@@ -174,15 +175,20 @@ const ArtistDashboard = () => {
 
       setBankLoading(true);
 
+      const dataToInsert: any = {
+        bank_name: validatedData.bank_name,
+        account_holder_name: validatedData.account_holder_name,
+        account_number: validatedData.account_number,
+        ifsc_code: validatedData.ifsc_code,
+        user_id: userId!,
+      };
+      if (validatedData.upi_id) {
+        dataToInsert.upi_id = validatedData.upi_id;
+      }
+
       const { error } = await supabase
         .from('artist_bank_details')
-        .upsert({ 
-          ...validatedData,
-          user_id: userId!,
-        }, {
-          onConflict: 'user_id', // upsert using primary key
-          ignoreDuplicates: false,
-        });
+        .upsert([dataToInsert]);
 
       if (error) throw error;
 
