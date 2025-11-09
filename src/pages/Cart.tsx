@@ -201,7 +201,9 @@ const Cart = () => {
     setShowPaymentModal(true);
   };
 
-  // This is the original function, now called *after* payment
+  // ------------------------------------------------------------------
+  // HERE IS THE FIXED, ATOMIC CHECKOUT FUNCTION
+  // ------------------------------------------------------------------
   const handleCheckout = async () => {
     if (!userId || cartItems.length === 0) return;
 
@@ -215,63 +217,18 @@ const Cart = () => {
     }
 
     try {
-      // Check stock availability
-      for (const item of cartItems) {
-        if (item.quantity > item.artwork.stock_quantity) {
-          toast({
-            title: "Insufficient Stock",
-            description: `Only ${item.artwork.stock_quantity} available for "${item.artwork.title}"`,
-            variant: "destructive",
-          });
-          return;
-        }
-        if (item.artwork.stock_quantity <= 0) {
-          toast({
-            title: "Out of Stock",
-            description: `"${item.artwork.title}" is out of stock`,
-            variant: "destructive",
-          });
-          return;
-        }
+      // This is the ONLY call we make now.
+      // All the logic is in the database function.
+      const { data, error }_ = await supabase.rpc('handle_checkout', {
+        p_buyer_id: userId,
+        p_delivery_address_id: selectedAddress,
+      });
+
+      if (error) {
+        // This will catch the 'Insufficient stock' error
+        // from the database function and show it to the user.
+        throw new Error(error.message);
       }
-
-      // Calculate 70% payment amount
-      const paymentAmount = total * 0.7;
-
-      // Create orders and decrement stock
-      const orders = cartItems.map((item) => ({
-        buyer_id: userId,
-        artwork_id: item.artwork.id,
-        artist_id: item.artwork.artist_id,
-        quantity: item.quantity,
-        total_price: item.artwork.price * item.quantity,
-        payment_amount: item.artwork.price * item.quantity * 0.7,
-        delivery_address_id: selectedAddress,
-        status: "pending",
-      }));
-
-      const { error: orderError } = await supabase.from("orders").insert(orders);
-
-      if (orderError) throw orderError;
-
-      // Decrement stock for each artwork
-      for (const item of cartItems) {
-        const newStock = item.artwork.stock_quantity - item.quantity;
-        const { error: stockError } = await supabase
-          .from("artworks")
-          .update({ stock_quantity: newStock })
-          .eq("id", item.artwork.id);
-
-        if (stockError) throw stockError;
-      }
-
-      // Clear cart
-      const { error: deleteError } = await supabase
-        .from("cart_items")
-        .delete()
-        .eq("user_id", userId);
-
-      if (deleteError) throw deleteError;
 
       toast({
         title: "Success!",
@@ -279,14 +236,27 @@ const Cart = () => {
       });
 
       navigate("/orders");
-    } catch (error) {
+
+    } catch (error: any) {
+      let errorMessage = "Failed to place order";
+      
+      // Clean up the error message from the database
+      if (error.message && error.message.includes("Insufficient stock")) {
+        errorMessage = error.message.split('ERROR: ').pop()?.split('CONTEXT:').shift() || "An item in your cart is out of stock.";
+      }
+      
       toast({
-        title: "Error",
-        description: "Failed to place order",
+        title: "Order Failed",
+        description: errorMessage,
         variant: "destructive",
       });
+      // Refetch cart items in case stock changed
+      if (userId) fetchCartItems(userId);
     }
   };
+  // ------------------------------------------------------------------
+  // END OF CHANGES
+  // ------------------------------------------------------------------
 
   const total = cartItems.reduce(
     (sum, item) => sum + item.artwork.price * item.quantity,
@@ -510,7 +480,10 @@ const Cart = () => {
                             />
                           </div>
                         </div>
-                        <Button onClick={handleSaveAddress} className="w-full">
+                        <Button
+                          onClick={handleSaveAddress}
+                          className="w-full"
+                        >
                           Save Address
                         </Button>
                       </div>
@@ -557,7 +530,7 @@ const Cart = () => {
                   <Button
                     className="w-full"
                     onClick={triggerCheckout}
-                    disabled={!selectedAddress}
+                    disabled={!selectedAddress || cartItems.length === 0}
                   >
                     Buy Now - Pay ₹{paymentAmount.toFixed(2)}
                   </Button>
@@ -573,7 +546,7 @@ const Cart = () => {
           onOpenChange={setShowPaymentModal}
           amount={paymentAmount}
           onPaymentSuccess={() => {
-            // This runs the original handleCheckout *after* the
+            // This runs the new handleCheckout *after* the
             // "Done" button is clicked on the success screen.
             handleCheckout();
           }}
