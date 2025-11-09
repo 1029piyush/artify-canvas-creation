@@ -219,7 +219,9 @@ const Cart = () => {
     try {
       // This is the ONLY call we make now.
       // All the logic is in the database function.
-      const { data, error }_ = await supabase.rpc('handle_checkout', {
+      
+      // THIS IS THE FIXED LINE (no underscore)
+      const { data, error } = await supabase.rpc('handle_checkout', {
         p_buyer_id: userId,
         p_delivery_address_id: selectedAddress,
       });
