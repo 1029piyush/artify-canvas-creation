@@ -77,6 +77,11 @@ interface Stats {
 	pending_payments: number;
 }
 
+interface UserProfile {
+	id: string;
+	user_type: "artist" | "buyer" | "admin";
+}
+
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
 const AdminDashboard = () => {
@@ -105,14 +110,14 @@ const AdminDashboard = () => {
 			return;
 		}
 
-		// FIX 1: Change to query the 'profiles' table and check 'user_type'
-		const { data: profileData } = await supabase
+		// FIX 1: Correct check for 'user_type' column
+		const { data: profileData, error: profileError } = await supabase
 			.from('profiles')
 			.select('user_type') 
 			.eq('id', session.user.id)
 			.single();
 
-		if (profileData?.user_type !== 'admin') {
+		if (profileError || profileData?.user_type !== 'admin') {
 			navigate('/admin-auth');
 			return;
 		}
@@ -123,11 +128,11 @@ const AdminDashboard = () => {
 	const fetchData = async () => {
 		setLoading(true);
 		
-		// Fetch artists with artwork count
+		// FIX 2: Fetch artists using 'profiles.user_type'
 		const { data: artistsData, error: artistsFetchError } = await supabase
 			.from('profiles')
 			.select('id, email, full_name')
-			.eq('user_type', 'artist'); // FIX 2: Query profiles.user_type
+			.eq('user_type', 'artist'); 
 		
 		if (artistsFetchError) console.error('Error fetching artists:', artistsFetchError);
 
@@ -283,10 +288,7 @@ const AdminDashboard = () => {
 			.delete()
 			.eq('artist_id', artistId);
 
-		// FIX 4: Removed deletion from non-existent 'user_roles' table
-		// The profile delete will now handle the rest (assuming cascade delete)
-		
-		// Delete profile
+		// Delete profile (This cascades and deletes the user from auth.users)
 		const { error } = await supabase
 			.from('profiles')
 			.delete()

@@ -1,584 +1,634 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "@/components/Navbar";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Trash2, Package, MessageSquare } from "lucide-react";
-import { z } from "zod";
+import { 
+	Users, 
+	Image, 
+	ShoppingCart, 
+	TrendingUp,
+	Trash2,
+	CheckCircle,
+	AlertCircle,
+	LogOut
+} from "lucide-react";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "@/components/ui/table";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+	AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
-const artworkSchema = z.object({
-  title: z.string().min(3, "Title must be at least 3 characters"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
-  price: z.number().min(1, "Price must be greater than 0"),
-  category: z.string().optional(),
-  stock_quantity: z.number().min(1, "Stock must be at least 1").max(10, "Maximum 10 items allowed"),
-});
+interface Artist {
+	id: string;
+	email: string;
+	full_name: string;
+	artwork_count: number;
+	has_pending_orders: boolean;
+	bank_details?: {
+		bank_name: string;
+		account_holder_name: string;
+		account_number: string;
+		ifsc_code: string;
+		upi_id?: string;
+	};
+}
 
 interface Artwork {
-  id: string;
-  title: string;
-  description: string | null;
-  price: number;
-  image_url: string;
-  category: string | null;
-  stock_quantity: number;
+	id: string;
+	title: string;
+	artist_name: string;
+	price: number;
 }
 
-// This interface is now based on 'order_items'
 interface Order {
-  id: string;
-  quantity: number;
-  created_at: string;
-  order: { // Nested 'orders' table data
-    id: string;
-    total_price: number;
-    status: string;
-  };
-  artwork: { // Nested 'artworks' table data
-    title: string;
-    image_url: string;
-  };
+	id: string;
+	created_at: string;
+	buyer_email: string;
+	artwork_title: string;
+	total_price: number;
+	payment_amount: number;
+	status: string;
+	payment_verified: boolean;
+	payment_id?: string;
 }
 
-// This interface is updated for the new, simpler query
-interface CustomRequest {
-  id: string;
-  title: string;
-  description: string;
-  budget: number | null;
-  status: string;
-  created_at: string;
-  artist_id: string | null;
-  buyer: {
-    id: string;
-    email: string;
-    full_name: string | null;
-  };
+interface Stats {
+	total_artists: number;
+	total_artworks: number;
+	total_orders: number;
+	delivered_orders: number;
+	pending_payments: number;
 }
 
-const ArtistDashboard = () => {
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const [userId, setUserId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [artworks, setArtworks] = useState<Artwork[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [customRequests, setCustomRequests] = useState<CustomRequest[]>([]);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    price: "",
-    category: "",
-    stock_quantity: "1",
-  });
+interface UserProfile {
+	id: string;
+	user_type: "artist" | "buyer" | "admin";
+}
 
-  useEffect(() => {
-    checkAuth();
-  }, []);
+const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
-  const checkAuth = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      navigate('/auth');
-      return;
-    }
+const AdminDashboard = () => {
+	const navigate = useNavigate();
+	const { toast } = useToast();
+	const [artists, setArtists] = useState<Artist[]>([]);
+	const [artworks, setArtworks] = useState<Artwork[]>([]);
+	const [orders, setOrders] = useState<Order[]>([]);
+	const [stats, setStats] = useState<Stats>({
+		total_artists: 0,
+		total_artworks: 0,
+		total_orders: 0,
+		delivered_orders: 0,
+		pending_payments: 0,
+	});
+	const [loading, setLoading] = useState(true);
 
-    // ---
-    // FIX 1: Keeping your correct 'user_type' check
-    // ---
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('user_type') 
-      .eq('id', session.user.id)
-      .single();
+	useEffect(() => {
+		checkAdminAccess();
+	}, []);
 
-    // Allow 'admin' to see this page as well
-    if (profile?.user_type !== 'artist' && profile?.user_type !== 'admin') {
-      toast({
-        title: "Access Denied",
-        description: "Only artists can access this page",
-        variant: "destructive",
-      });
-      navigate('/');
-      return;
-    }
+	const checkAdminAccess = async () => {
+		const { data: { session } } = await supabase.auth.getSession();
+		if (!session) {
+			navigate('/admin-auth');
+			return;
+		}
 
-    setUserId(session.user.id);
-    fetchArtworks(session.user.id);
-    fetchOrders(session.user.id);
-    fetchCustomRequests();
-  };
+		// FIX 1: Change check to query the 'profiles' table and check 'user_type'
+		const { data: profileData, error: profileError } = await supabase
+			.from('profiles')
+			.select('user_type') 
+			.eq('id', session.user.id)
+			.single();
 
-  const fetchArtworks = async (uid: string) => {
-    const { data } = await supabase
-      .from('artworks')
-      .select('*')
-      .eq('artist_id', uid)
-      .order('created_at', { ascending: false });
+		if (profileError || profileData?.user_type !== 'admin') {
+			navigate('/admin-auth');
+			return;
+		}
 
-    if (data) {
-      setArtworks(data);
-    }
-  };
+		fetchData();
+	};
 
-  // ---
-  // FIX 3: Rewrote 'fetchOrders' to work with the new 'order_items' table
-  // ---
-  const fetchOrders = async (uid: string) => {
-    const { data, error } = await supabase
-      .from('order_items') // We query 'order_items'
-      .select(`
-        id,
-        quantity,
-        created_at,
-        order:orders (
-          id,
-          total_price,
-          status
-        ),
-        artwork:artworks (
-          title,
-          image_url
-        )
-      `)
-      .eq('artworks.artist_id', uid) // Filter by artist_id on the *joined* artwork
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      console.error("Error fetching orders:", error);
-    } else if (data) {
-      setOrders(data as Order[]);
-    }
-  };
+	const fetchData = async () => {
+		setLoading(true);
+		
+		// FIX 2: Fetch artists using 'profiles.user_type'
+		const { data: artistsData, error: artistsFetchError } = await supabase
+			.from('profiles')
+			.select('id, email, full_name')
+			.eq('user_type', 'artist'); 
+		
+		if (artistsFetchError) console.error('Error fetching artists:', artistsFetchError);
 
-  // ---
-  // FIX 4: Simplified 'fetchCustomRequests' to a single, efficient query
-  // ---
-  const fetchCustomRequests = async () => {
-    const { data, error } = await supabase
-      .from('custom_requests')
-      .select(`
-        id,
-        title,
-        description,
-        budget,
-        status,
-        created_at,
-        artist_id,
-        buyer:profiles!buyer_id (
-          id,
-          email,
-          full_name
-        )
-      `)
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      console.error("Error fetching requests:", error);
-    } else if (data) {
-      // Ensure 'buyer' is not null, default to an object
-      const safeData = data.map(req => ({
-        ...req,
-        buyer: req.buyer || { id: 'unknown', email: 'N/A', full_name: 'Unknown' }
-      }));
-      setCustomRequests(safeData as CustomRequest[]);
-    }
-  };
+		// Fetch artworks count per artist and bank details
+		const artistsWithDetails = await Promise.all(
+			(artistsData || []).map(async (artist) => {
+				const { count } = await supabase
+					.from('artworks')
+					.select('*', { count: 'exact', head: true })
+					.eq('artist_id', artist.id);
 
-  const handleClaimRequest = async (requestId: string) => {
-    if (!userId) return; // Added check for safety
-    
-    const { error } = await supabase
-      .from('custom_requests')
-      .update({ artist_id: userId, status: 'accepted' })
-      .eq('id', requestId);
+				const { data: bankData } = await supabase
+					.from('artist_bank_details')
+					.select('*')
+					.eq('user_id', artist.id)
+					.single();
 
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to claim request",
-        variant: "destructive",
-      });
-    } else {
-      toast({
-        title: "Success",
-        description: "Request claimed successfully",
-      });
-      fetchCustomRequests();
-    }
-  };
+				const { data: pendingOrders } = await supabase
+					.from('orders')
+					.select('id')
+					.eq('artist_id', artist.id)
+					.eq('status', 'pending');
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setImageFile(e.target.files[0]);
-    }
-  };
+				return {
+					...artist,
+					artwork_count: count || 0,
+					has_pending_orders: (pendingOrders?.length || 0) > 0,
+					bank_details: bankData || undefined,
+				};
+			})
+		);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+		setArtists(artistsWithDetails);
 
-    if (!imageFile) {
-      toast({
-        title: "Error",
-        description: "Please select an image",
-        variant: "destructive",
-      });
-      return;
-    }
+		// Fetch all artworks with artist names
+		const { data: artworksData } = await supabase
+			.from('artworks')
+			.select(`
+				id,
+				title,
+				price,
+				artist:profiles(full_name)
+			`);
 
-    // ---
-    // (CRITICAL) Make sure you have created a PUBLIC bucket named "artworks" in your Supabase project.
-    // ---
-    if (!userId) return;
+		setArtworks(
+			(artworksData || []).map((artwork: any) => ({
+				id: artwork.id,
+				title: artwork.title,
+				price: artwork.price,
+				artist_name: artwork.artist?.full_name || 'Unknown',
+			}))
+		);
 
-    try {
-      const validatedData = artworkSchema.parse({
-        ...formData,
-        price: parseFloat(formData.price),
-        stock_quantity: parseInt(formData.stock_quantity),
-      });
+		// Fetch orders with payment details
+		const { data: ordersData } = await supabase
+			.from('orders')
+			.select(`
+				id,
+				created_at,
+				total_price,
+				payment_amount,
+				status,
+				buyer:profiles!orders_buyer_id_fkey(email),
+				artwork:artworks(title),
+				payment:payment_details(id, verified_by_admin)
+			`)
+			.order('created_at', { ascending: false });
 
-      setLoading(true);
+		const formattedOrders = (ordersData || []).map((order: any) => ({
+			id: order.id,
+			created_at: order.created_at,
+			buyer_email: order.buyer?.email || 'Unknown',
+			artwork_title: order.artwork?.title || 'Unknown',
+			total_price: order.total_price,
+			payment_amount: order.payment_amount || 0,
+			status: order.status,
+			// FIX 3: Simplify accessing payment details as it's an array
+			payment_verified: order.payment?.[0]?.verified_by_admin || false, 
+			payment_id: order.payment?.[0]?.id,
+		}));
 
-      // Upload image
-      const fileExt = imageFile.name.split('.').pop();
-      const fileName = `${userId}-${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('artworks') // Assumes 'artworks' bucket exists
-        .upload(fileName, imageFile);
+		setOrders(formattedOrders);
 
-      if (uploadError) throw uploadError;
+		// Calculate stats
+		const { count: totalOrders } = await supabase
+			.from('orders')
+			.select('*', { count: 'exact', head: true });
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('artworks')
-        .getPublicUrl(fileName);
+		const { count: deliveredOrders } = await supabase
+			.from('orders')
+			.select('*', { count: 'exact', head: true })
+			.eq('status', 'delivered');
 
-      // ---
-      // FIX 5: Removed 'is_available' field, which is not in our new database
-      // ---
-      const { error: insertError } = await supabase
-        .from('artworks')
-        .insert({
-          artist_id: userId,
-          title: validatedData.title,
-          description: validatedData.description,
-          price: validatedData.price,
-          category: validatedData.category || null,
-          image_url: publicUrl,
-          // is_available: true, // This column does not exist
-          stock_quantity: validatedData.stock_quantity,
-        });
+		const { data: paymentsData } = await supabase
+			.from('payment_details')
+			.select('verified_by_admin')
+			.eq('verified_by_admin', false);
 
-      if (insertError) throw new Error(insertError.message);
+		setStats({
+			total_artists: artistsWithDetails.length,
+			total_artworks: artworksData?.length || 0,
+			total_orders: totalOrders || 0,
+			pending_payments: paymentsData?.length || 0,
+			delivered_orders: deliveredOrders || 0,
+		});
 
-      toast({
-        title: "Success!",
-        description: "Artwork uploaded successfully",
-      });
+		// Set up realtime listeners (Leaving this as is, assuming policies are set up)
+		const ordersChannel = supabase
+			.channel('admin-orders')
+			.on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+				fetchData();
+			})
+			.on('postgres_changes', { event: '*', schema: 'public', table: 'payment_details' }, () => {
+				fetchData();
+			})
+			.on('postgres_changes', { event: '*', schema: 'public', table: 'artworks' }, () => {
+				fetchData();
+			})
+			.subscribe();
 
-      setFormData({ title: "", description: "", price: "", category: "", stock_quantity: "1" });
-      setImageFile(null);
-      if (userId) fetchArtworks(userId);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        toast({
-          title: "Validation Error",
-          description: error.errors[0].message,
-          variant: "destructive",
-        });
-      } else {
-        console.error("Upload error:", error);
-        toast({
-          title: "Error",
-          description: (error as Error).message || "Failed to upload artwork. (Did you create the 'artworks' storage bucket?)",
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+		setLoading(false);
 
-  const deleteArtwork = async (id: string) => {
-    const { error } = await supabase
-      .from('artworks')
-      .delete()
-      .eq('id', id);
+		return () => {
+			supabase.removeChannel(ordersChannel);
+		};
+	};
 
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete artwork",
-        variant: "destructive",
-      });
-    } else {
-      toast({
-        title: "Success",
-        description: "Artwork deleted",
-      });
-      if (userId) fetchArtworks(userId);
-    }
-  };
+	const handleDeleteArtwork = async (artworkId: string) => {
+		const { error } = await supabase
+			.from('artworks')
+			.delete()
+			.eq('id', artworkId);
 
-  return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
-      
-      <div className="container py-8">
-        <h1 className="mb-8 text-3xl font-bold">Artist Dashboard</h1>
+		if (error) {
+			toast({
+				title: "Error",
+				description: "Failed to delete artwork",
+				variant: "destructive",
+			});
+		} else {
+			toast({
+				title: "Success",
+				description: "Artwork deleted successfully",
+			});
+			fetchData();
+		}
+	};
 
-        <Tabs defaultValue="upload" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="upload">Upload Artwork</TabsTrigger>
-            <TabsTrigger value="artworks">My Artworks</TabsTrigger>
-            <TabsTrigger value="orders">Orders</TabsTrigger>
-            <TabsTrigger value="custom-requests">Custom Requests</TabsTrigger>
-          </TabsList>
+	const handleDeleteArtist = async (artistId: string) => {
+		// Delete all artworks first
+		await supabase
+			.from('artworks')
+			.delete()
+			.eq('artist_id', artistId);
 
-          <TabsContent value="upload">
-            <Card>
-              <CardHeader>
-                <CardTitle>Upload New Artwork</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="image">Artwork Image</Label>
-                    <div className="flex items-center gap-4">
-                      <Input
-                        id="image"
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageChange}
-                        required
-                      />
-                      {imageFile && (
-                        <span className="text-sm text-muted-foreground">
-                          {imageFile.name}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+		// FIX 4: Removed deletion from non-existent 'user_roles' table
+		// Delete profile (This cascades and deletes the user from auth.users)
+		const { error } = await supabase
+			.from('profiles')
+			.delete()
+			.eq('id', artistId);
 
-                  <div className="space-y-2">
-                    <Label htmlFor="title">Title</Label>
-                    <Input
-                      id="title"
-                      placeholder="Artwork title"
-                      value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      required
-                    />
-                  </div>
+		if (error) {
+			toast({
+				title: "Error",
+				description: "Failed to delete artist",
+				variant: "destructive",
+			});
+		} else {
+			toast({
+				title: "Success",
+				description: "Artist and their artworks deleted successfully",
+			});
+			fetchData();
+		}
+	};
 
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea
-                      id="description"
-                      placeholder="Describe your artwork..."
-                      rows={4}
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      required
-                    />
-                  </div>
+	const handleVerifyPayment = async (paymentId: string, orderId: string) => {
+		const { error: paymentError } = await supabase
+			.from('payment_details')
+			.update({ 
+				verified_by_admin: true,
+				verified_at: new Date().toISOString()
+			})
+			.eq('id', paymentId);
 
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="price">Price (₹)</Label>
-                      <Input
-                        id="price"
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={formData.price}
-                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                        required
-                      />
-                    </div>
+		const { error: orderError } = await supabase
+			.from('orders')
+			.update({ 
+				status: 'confirmed',
+				artist_notified: true
+			})
+			.eq('id', orderId);
 
-                    <div className="space-y-2">
-                      <Label htmlFor="stock_quantity">Stock Quantity</Label>
-                      <Input
-                        id="stock_quantity"
-                        type="number"
-                        min="1"
-                        max="10"
-                        placeholder="1"
-                        value={formData.stock_quantity}
-                        onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
-                        required
-                      />
-                    </div>
+		if (paymentError || orderError) {
+			toast({
+				title: "Error",
+				description: "Failed to verify payment",
+				variant: "destructive",
+			});
+		} else {
+			toast({
+				title: "Payment Verified",
+				description: "Order confirmed and artist notified",
+			});
+			fetchData();
+		}
+	};
 
-                    <div className="space-y-2">
-                      <Label htmlFor="category">Category (Optional)</Label>
-                      <Input
-                        id="category"
-                        placeholder="e.g., Abstract, Portrait"
-                        value={formData.category}
-                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      />
-                    </div>
-                  </div>
+	const handleSignOut = async () => {
+		await supabase.auth.signOut();
+		navigate('/admin-auth');
+	};
 
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    <Upload className="mr-2 h-4 w-4" />
-                    {loading ? "Uploading..." : "Upload Artwork"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
+	if (loading) {
+		return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+	}
 
-          <TabsContent value="artworks">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {artworks.map((artwork) => (
-                <Card key={artwork.id}>
-                  <CardContent className="p-0">
-                    <img
-                      src={artwork.image_url}
-                      alt={artwork.title}
-                      className="aspect-square w-full object-cover rounded-t-lg"
-                    />
-                    <div className="p-4 space-y-2">
-                      <h3 className="font-semibold">{artwork.title}</h3>
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {artwork.description}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <p className="font-bold text-primary">₹{artwork.price.toFixed(2)}</p>
-                        <p className="text-sm text-muted-foreground">Stock: {artwork.stock_quantity}</p>
-                      </div>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => deleteArtwork(artwork.id)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-              {artworks.length === 0 && (
-                <Card className="col-span-full">
-                  <CardContent className="py-12 text-center">
-                    <p className="text-muted-foreground">No artworks uploaded yet</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
+	const pieData = [
+		{ name: 'Delivered', value: stats.delivered_orders },
+		{ name: 'Pending', value: stats.total_orders - stats.delivered_orders },
+	];
 
-          <TabsContent value="orders">
-            <div className="space-y-4">
-              {orders.map((orderItem) => (
-                <Card key={orderItem.id}>
-                  <CardContent className="flex gap-4 p-4">
-                    <img
-                      src={orderItem.artwork.image_url}
-                      alt={orderItem.artwork.title}
-                      className="h-20 w-20 rounded-lg object-cover"
-                    />
-                    <div className="flex-1">
-                      <h3 className="font-semibold">{orderItem.artwork.title}</h3>
-                      {/* --- FIX 6: Accessing nested order data correctly --- */}
-                      <p className="text-sm text-muted-foreground">
-                        Quantity: {orderItem.quantity} • Total: ₹{orderItem.order.total_price.toFixed(2)}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Status: <span className="font-medium capitalize">{orderItem.order.status}</span>
-                      </p>
-                    </div>
-                    <Package className="h-8 w-8 text-muted-foreground" />
-                  </CardContent>
-                </Card>
-              ))}
-              {orders.length === 0 && (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <p className="text-muted-foreground">No orders yet</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
+	return (
+		<div className="min-h-screen bg-background">
+			<div className="container py-8">
+				<div className="flex justify-between items-center mb-8">
+					<h1 className="text-3xl font-bold">Admin Dashboard</h1>
+					<Button onClick={handleSignOut} variant="outline">
+						<LogOut className="mr-2 h-4 w-4" />
+						Sign Out
+					</Button>
+				</div>
 
-          <TabsContent value="custom-requests">
-            <div className="space-y-4">
-              {customRequests.map((request) => (
-                <Card key={request.id}>
-                  <CardContent className="p-6 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3">
-                        <MessageSquare className="h-6 w-6 text-primary mt-1" />
-                        <div className="space-y-1">
-                          <h3 className="font-semibold text-lg">{request.title}</h3>
-                          <p className="text-sm text-muted-foreground">{request.description}</p>
-                        </div>
-                      </div>
-                      <span className="text-xs px-3 py-1 rounded-full bg-secondary capitalize">
-                        {request.status}
-                      </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 pt-3 border-t">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Requested by</p>
-                        <p className="font-medium">{request.buyer?.full_name || 'Unknown'}</p>
-                        <p className="text-sm text-muted-foreground">{request.buyer?.email || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Budget</p>
-                        <p className="font-bold text-primary">
-                          {request.budget ? `₹${request.budget.toFixed(2)}` : 'Not specified'}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <p className="text-xs text-muted-foreground pt-2">
-                      Requested on {new Date(request.created_at).toLocaleDateString()}
-                    </p>
+				{/* Stats Cards */}
+				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+					<Card>
+						<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+							<CardTitle className="text-sm font-medium">Total Artists</CardTitle>
+							<Users className="h-4 w-4 text-muted-foreground" />
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{stats.total_artists}</div>
+						</CardContent>
+					</Card>
+					<Card>
+						<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+							<CardTitle className="text-sm font-medium">Total Artworks</CardTitle>
+							<Image className="h-4 w-4 text-muted-foreground" />
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{stats.total_artworks}</div>
+						</CardContent>
+					</Card>
+					<Card>
+						<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+							<CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+							<ShoppingCart className="h-4 w-4 text-muted-foreground" />
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{stats.total_orders}</div>
+						</CardContent>
+					</Card>
+					<Card>
+						<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+							<CardTitle className="text-sm font-medium">Delivered</CardTitle>
+							<TrendingUp className="h-4 w-4 text-muted-foreground" />
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{stats.delivered_orders}</div>
+						</CardContent>
+					</Card>
+					<Card>
+						<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+							<CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
+							<AlertCircle className="h-4 w-4 text-muted-foreground" />
+						</CardHeader>
+						<CardContent>
+							<div className="text-2xl font-bold">{stats.pending_payments}</div>
+						</CardContent>
+					</Card>
+				</div>
 
-                    {request.status === 'pending' && !request.artist_id && (
-                      <Button 
-                        onClick={() => handleClaimRequest(request.id)}
-                        className="w-full mt-4"
-                      >
-                        Accept & Claim Request
-                      </Button>
-                    )}
-                    {request.artist_id === userId && (
-                      <div className="mt-4 p-3 bg-primary/10 rounded-lg">
-                        <p className="text-sm font-medium text-primary">You claimed this request</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-              {customRequests.length === 0 && (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <p className="text-muted-foreground">No custom requests yet</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
-  );
+				{/* Pie Chart */}
+				<Card className="mb-8">
+					<CardHeader>
+						<CardTitle>Order Status Distribution</CardTitle>
+					</CardHeader>
+					<CardContent>
+						<ResponsiveContainer width="100%" height={300}>
+							<PieChart>
+								<Pie
+									data={pieData}
+									cx="50%"
+									cy="50%"
+									labelLine={false}
+									label={({ name, value }) => `${name}: ${value}`}
+									outerRadius={80}
+									fill="#8884d8"
+									dataKey="value"
+								>
+									{pieData.map((entry, index) => (
+										<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+									))}
+								</Pie>
+								<Tooltip />
+								<Legend />
+							</PieChart>
+						</ResponsiveContainer>
+					</CardContent>
+				</Card>
+
+				{/* Recent Orders with Payment Verification */}
+				<Card className="mb-8">
+					<CardHeader>
+						<CardTitle>Recent Orders</CardTitle>
+					</CardHeader>
+					<CardContent>
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Date</TableHead>
+									<TableHead>Buyer</TableHead>
+									<TableHead>Artwork</TableHead>
+									<TableHead>Total Price</TableHead>
+									<TableHead>Payment Amount</TableHead>
+									<TableHead>Status</TableHead>
+									<TableHead>Payment</TableHead>
+									<TableHead>Action</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{orders.map((order) => (
+									<TableRow key={order.id}>
+										<TableCell>{new Date(order.created_at).toLocaleDateString()}</TableCell>
+										<TableCell>{order.buyer_email}</TableCell>
+										<TableCell>{order.artwork_title}</TableCell>
+										<TableCell>₹{order.total_price.toFixed(2)}</TableCell>
+										<TableCell>₹{order.payment_amount.toFixed(2)}</TableCell>
+										<TableCell>
+											<span className={`px-2 py-1 rounded-full text-xs ${
+												order.status === 'delivered' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+											}`}>
+												{order.status}
+											</span>
+										</TableCell>
+										<TableCell>
+											{order.payment_verified ? (
+												<CheckCircle className="h-5 w-5 text-green-600" />
+											) : (
+												<AlertCircle className="h-5 w-5 text-yellow-600" />
+											)}
+										</TableCell>
+										<TableCell>
+											{!order.payment_verified && order.payment_id && (
+												<Button
+													size="sm"
+													onClick={() => handleVerifyPayment(order.payment_id!, order.id)}
+												>
+													Verify Payment
+												</Button>
+											)}
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+					</CardContent>
+				</Card>
+
+				{/* Artists with Bank Details */}
+				<Card className="mb-8">
+					<CardHeader>
+						<CardTitle>Artists & Bank Details</CardTitle>
+					</CardHeader>
+					<CardContent>
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Status</TableHead>
+									<TableHead>Artist</TableHead>
+									<TableHead>Email</TableHead>
+									<TableHead>Artworks</TableHead>
+									<TableHead>Bank Details</TableHead>
+									<TableHead>UPI ID</TableHead>
+									<TableHead>Action</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{artists.map((artist) => (
+									<TableRow key={artist.id}>
+										<TableCell>
+											{artist.has_pending_orders && (
+												<div className="w-2 h-2 bg-red-500 rounded-full" title="Has pending orders" />
+											)}
+										</TableCell>
+										<TableCell>{artist.full_name}</TableCell>
+										<TableCell>{artist.email}</TableCell>
+										<TableCell>{artist.artwork_count}</TableCell>
+										<TableCell>
+											{artist.bank_details ? (
+												<div className="text-xs">
+													<div>{artist.bank_details.bank_name}</div>
+													<div>{artist.bank_details.account_number}</div>
+													<div>{artist.bank_details.ifsc_code}</div>
+												</div>
+											) : (
+												<span className="text-muted-foreground">Not provided</span>
+											)}
+										</TableCell>
+										<TableCell>
+											{artist.bank_details?.upi_id || <span className="text-muted-foreground">-</span>}
+										</TableCell>
+										<TableCell>
+											<AlertDialog>
+												<AlertDialogTrigger asChild>
+													<Button variant="destructive" size="sm">
+														<Trash2 className="h-4 w-4" />
+													</Button>
+												</AlertDialogTrigger>
+												<AlertDialogContent>
+													<AlertDialogHeader>
+														<AlertDialogTitle>Delete Artist</AlertDialogTitle>
+														<AlertDialogDescription>
+															This will delete the artist and all their artworks. This action cannot be undone.
+														</AlertDialogDescription>
+													</AlertDialogHeader>
+													<AlertDialogFooter>
+														<AlertDialogCancel>Cancel</AlertDialogCancel>
+														<AlertDialogAction onClick={() => handleDeleteArtist(artist.id)}>
+															Delete
+														</AlertDialogAction>
+													</AlertDialogFooter>
+												</AlertDialogContent>
+											</AlertDialog>
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+					</CardContent>
+				</Card>
+
+				{/* All Artworks */}
+				<Card>
+					<CardHeader>
+						<CardTitle>All Artworks</CardTitle>
+					</CardHeader>
+					<CardContent>
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Title</TableHead>
+									<TableHead>Artist</TableHead>
+									<TableHead>Price</TableHead>
+									<TableHead>Action</TableHead>
+								</TableRow>
+							</TableHeader>
+							<TableBody>
+								{artworks.map((artwork) => (
+									<TableRow key={artwork.id}>
+										<TableCell>{artwork.title}</TableCell>
+										<TableCell>{artwork.artist_name}</TableCell>
+										<TableCell>₹{artwork.price.toFixed(2)}</TableCell>
+										<TableCell>
+											<AlertDialog>
+												<AlertDialogTrigger asChild>
+													<Button variant="destructive" size="sm">
+														<Trash2 className="h-4 w-4" />
+													</Button>
+												</AlertDialogTrigger>
+												<AlertDialogContent>
+													<AlertDialogHeader>
+														<AlertDialogTitle>Delete Artwork</AlertDialogTitle>
+														<AlertDialogDescription>
+															Are you sure you want to delete this artwork? This action cannot be undone.
+														</AlertDialogDescription>
+													</AlertDialogHeader>
+													<AlertDialogFooter>
+														<AlertDialogCancel>Cancel</AlertDialogCancel>
+														<AlertDialogAction onClick={() => handleDeleteArtwork(artwork.id)}>
+															Delete
+														</AlertDialogAction>
+													</AlertDialogFooter>
+												</AlertDialogContent>
+											</AlertDialog>
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+					</CardContent>
+				</Card>
+			</div>
+		</div>
+	);
 };
 
-export default ArtistDashboard;
+export default AdminDashboard;
