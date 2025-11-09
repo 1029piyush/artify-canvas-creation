@@ -3,7 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import Navbar from "@/components/Navbar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+// HERE ARE THE CHANGES: Added CardFooter and Button
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardFooter,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+// END OF CHANGES
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Package, Calendar, DollarSign } from "lucide-react";
@@ -18,11 +27,13 @@ interface OrderItem {
   artworks: {
     title: string;
     image_url: string;
-    artist_id: string;
+    // HERE IS A CHANGE: We need the stock to restore it
+    stock_quantity: number;
   };
   profiles: {
     full_name: string;
   };
+  artist_id: string; // Added artist_id here for the main query
 }
 
 const Orders = () => {
@@ -30,6 +41,8 @@ const Orders = () => {
   const { toast } = useToast();
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // HERE IS A CHANGE: New state to track which order is being cancelled
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   useEffect(() => {
     checkAuthAndFetchOrders();
@@ -37,7 +50,7 @@ const Orders = () => {
 
   const checkAuthAndFetchOrders = async () => {
     const { data: { session } } = await supabase.auth.getSession();
-    
+
     if (!session) {
       navigate("/auth");
       return;
@@ -51,7 +64,8 @@ const Orders = () => {
       setLoading(true);
       const { data, error } = await supabase
         .from("orders")
-        .select(`
+        .select(
+          `
           id,
           artwork_id,
           artist_id,
@@ -61,9 +75,11 @@ const Orders = () => {
           created_at,
           artworks (
             title,
-            image_url
+            image_url,
+            stock_quantity
           )
-        `)
+        `
+        )
         .eq("buyer_id", userId)
         .order("created_at", { ascending: false });
 
@@ -77,7 +93,7 @@ const Orders = () => {
             .select("full_name")
             .eq("id", order.artist_id)
             .single();
-          
+
           return {
             ...order,
             profiles: profile || { full_name: "Unknown Artist" },
@@ -98,6 +114,50 @@ const Orders = () => {
     }
   };
 
+  // HERE IS THE NEW FUNCTION TO HANDLE CANCELLATION
+  const handleCancelOrder = async (order: OrderItem) => {
+    setCancellingId(order.id);
+    try {
+      // 1. Restore the stock quantity
+      const newStock = order.artworks.stock_quantity + order.quantity;
+      const { error: stockError } = await supabase
+        .from("artworks")
+        .update({ stock_quantity: newStock })
+        .eq("id", order.artwork_id);
+
+      if (stockError) throw stockError;
+
+      // 2. Update the order status to 'cancelled'
+      const { error: orderError } = await supabase
+        .from("orders")
+        .update({ status: "cancelled" })
+        .eq("id", order.id);
+
+      if (orderError) throw orderError;
+
+      // 3. Update the UI state locally
+      setOrders(
+        orders.map((o) =>
+          o.id === order.id ? { ...o, status: "cancelled" } : o
+        )
+      );
+
+      toast({
+        title: "Order Cancelled",
+        description: "Your order has been successfully cancelled.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to cancel order. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setCancellingId(null);
+    }
+  };
+  // END OF NEW FUNCTION
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "pending":
@@ -114,7 +174,7 @@ const Orders = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      
+
       <main className="container py-8 px-4 animate-fade-in">
         <div className="mb-8">
           <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-[image:var(--gradient-artify)] mb-2">
@@ -176,7 +236,8 @@ const Orders = () => {
                       })}
                     </div>
                     <Badge className={getStatusColor(order.status)}>
-                      {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                      {order.status.charAt(0).toUpperCase() +
+                        order.status.slice(1)}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -189,7 +250,7 @@ const Orders = () => {
                         className="h-32 w-32 object-cover rounded-lg border border-border/50 group-hover:scale-105 transition-transform duration-300"
                       />
                     </div>
-                    
+
                     <div className="flex-1">
                       <h3 className="text-xl font-semibold mb-2">
                         {order.artworks.title}
@@ -197,7 +258,7 @@ const Orders = () => {
                       <p className="text-sm text-muted-foreground mb-3">
                         Artist: {order.profiles?.full_name || "Unknown Artist"}
                       </p>
-                      
+
                       <div className="flex items-center gap-6 text-sm">
                         <div className="flex items-center gap-2">
                           <Package className="h-4 w-4 text-muted-foreground" />
@@ -213,6 +274,22 @@ const Orders = () => {
                     </div>
                   </div>
                 </CardContent>
+
+                {/* HERE IS THE NEW CARD FOOTER WITH THE BUTTON */}
+                {order.status === "pending" && (
+                  <CardFooter className="bg-muted/30 p-4 flex justify-end">
+                    <Button
+                      variant="destructive"
+                      onClick={() => handleCancelOrder(order)}
+                      disabled={cancellingId === order.id}
+                    >
+                      {cancellingId === order.id
+                        ? "Cancelling..."
+                        : "Cancel Order"}
+                    </Button>
+                  </CardFooter>
+                )}
+                {/* END OF NEW SECTION */}
               </Card>
             ))}
           </div>

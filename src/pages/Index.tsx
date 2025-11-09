@@ -3,7 +3,8 @@ import Navbar from "@/components/Navbar";
 import ArtworkCard from "@/components/ArtworkCard";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Palette, Sparkles, Shield } from "lucide-react";
+// HERE IS A CHANGE: Added 'Banknote' icon
+import { Palette, Sparkles, Shield, Banknote } from "lucide-react";
 import { Link } from "react-router-dom";
 
 interface Artwork {
@@ -107,6 +108,38 @@ const Index = () => {
           </div>
         </div>
       </section>
+
+      {/* HERE IS THE NEW SECTION YOU REQUESTED
+      */}
+      <section className="py-16 bg-primary/5">
+        <div className="container">
+          <div className="mx-auto max-w-3xl text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+              <Banknote className="h-8 w-8 text-primary" />
+            </div>
+            <h2 className="mb-4 text-3xl font-bold">Buy with Confidence</h2>
+            <p className="text-xl text-muted-foreground">
+              For custom art requests, we use a secure split-payment system to protect both you and the artist.
+            </p>
+            <div className="mt-8 grid gap-6 md:grid-cols-2">
+              <div className="rounded-lg border bg-background p-6 shadow-sm">
+                <h3 className="text-2xl font-semibold text-primary">70% Advance</h3>
+                <p className="mt-2 text-muted-foreground">
+                  Pay 70% upfront to book the artist and get your custom creation started.
+                </p>
+              </div>
+              <div className="rounded-lg border bg-background p-6 shadow-sm">
+                <h3 className="text-2xl font-semibold text-primary">30% on Delivery</h3>
+                <p className="mt-2 text-muted-foreground">
+                  Pay the remaining 30% only after you approve the final artwork and it's ready for delivery.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      {/* END OF NEW SECTION */}
+
 
       {/* Artworks Gallery */}
       <section id="featured-artworks" className="py-16 scroll-mt-20">

@@ -134,11 +134,12 @@ const Auth = () => {
       <Card className="w-full max-w-md shadow-[var(--shadow-card)] hover:shadow-[var(--shadow-hover)] transition-all duration-300 border-border/50 backdrop-blur-sm bg-card/95">
         <CardHeader className="text-center">
           <Link to="/" className="mx-auto mb-4 hover:scale-105 transition-transform duration-300">
-            <img 
-              src="/src/assets/artify-logo.jpg" 
-              alt="Artify" 
-              className="h-12 w-auto object-contain"
-            />
+            {/* HERE IS THE CHANGE:
+              Removed the <img> tag and replaced it with this styled <h1> tag.
+            */}
+            <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-[image:var(--gradient-artify)]">
+              Artify
+            </h1>
           </Link>
           <CardTitle className="text-3xl bg-clip-text text-transparent bg-[image:var(--gradient-artify)]">Welcome to Artify</CardTitle>
           <CardDescription>Sign in or create an account to continue</CardDescription>

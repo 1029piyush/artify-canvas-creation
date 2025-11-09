@@ -8,7 +8,15 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, ShoppingBag, Plus } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+// This is the new import
+import { DummyPaymentGateway } from "@/components/DummyPaymentGateway";
 
 interface CartItem {
   id: string;
@@ -45,6 +53,10 @@ const Cart = () => {
   const [showAddressDialog, setShowAddressDialog] = useState(false);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+
+  // This is the new state for the modal
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+
   const [addressForm, setAddressForm] = useState({
     full_name: "",
     phone: "",
@@ -63,7 +75,7 @@ const Cart = () => {
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      navigate('/auth');
+      navigate("/auth");
       return;
     }
     setUserId(session.user.id);
@@ -72,8 +84,9 @@ const Cart = () => {
 
   const fetchCartItems = async (uid: string) => {
     const { data, error } = await supabase
-      .from('cart_items')
-      .select(`
+      .from("cart_items")
+      .select(
+        `
         id,
         quantity,
         artwork:artworks (
@@ -84,8 +97,9 @@ const Cart = () => {
           artist_id,
           stock_quantity
         )
-      `)
-      .eq('user_id', uid);
+      `
+      )
+      .eq("user_id", uid);
 
     if (error) {
       toast({
@@ -99,13 +113,13 @@ const Cart = () => {
 
     // Fetch addresses
     const { data: addressData, error: addressError } = await supabase
-      .from('delivery_addresses')
-      .select('*')
-      .eq('user_id', uid);
+      .from("delivery_addresses")
+      .select("*")
+      .eq("user_id", uid);
 
     if (!addressError && addressData) {
       setAddresses(addressData);
-      const defaultAddress = addressData.find(addr => addr.is_default);
+      const defaultAddress = addressData.find((addr) => addr.is_default);
       if (defaultAddress) {
         setSelectedAddress(defaultAddress.id);
       }
@@ -116,9 +130,9 @@ const Cart = () => {
 
   const removeFromCart = async (cartItemId: string) => {
     const { error } = await supabase
-      .from('cart_items')
+      .from("cart_items")
       .delete()
-      .eq('id', cartItemId);
+      .eq("id", cartItemId);
 
     if (error) {
       toast({
@@ -137,13 +151,12 @@ const Cart = () => {
     }
   };
 
-
   const handleSaveAddress = async () => {
     if (!userId) return;
 
     try {
       const { error } = await supabase
-        .from('delivery_addresses')
+        .from("delivery_addresses")
         .insert([{ ...addressForm, user_id: userId }]);
 
       if (error) throw error;
@@ -174,6 +187,21 @@ const Cart = () => {
     }
   };
 
+  // This is the new function to open the modal
+  const triggerCheckout = () => {
+    if (!selectedAddress) {
+      toast({
+        title: "Address Required",
+        description: "Please select a delivery address",
+        variant: "destructive",
+      });
+      return;
+    }
+    // All good, open the payment modal
+    setShowPaymentModal(true);
+  };
+
+  // This is the original function, now called *after* payment
   const handleCheckout = async () => {
     if (!userId || cartItems.length === 0) return;
 
@@ -211,20 +239,18 @@ const Cart = () => {
       const paymentAmount = total * 0.7;
 
       // Create orders and decrement stock
-      const orders = cartItems.map(item => ({
+      const orders = cartItems.map((item) => ({
         buyer_id: userId,
         artwork_id: item.artwork.id,
         artist_id: item.artwork.artist_id,
         quantity: item.quantity,
         total_price: item.artwork.price * item.quantity,
-        payment_amount: (item.artwork.price * item.quantity) * 0.7,
+        payment_amount: item.artwork.price * item.quantity * 0.7,
         delivery_address_id: selectedAddress,
-        status: 'pending'
+        status: "pending",
       }));
 
-      const { error: orderError } = await supabase
-        .from('orders')
-        .insert(orders);
+      const { error: orderError } = await supabase.from("orders").insert(orders);
 
       if (orderError) throw orderError;
 
@@ -232,18 +258,18 @@ const Cart = () => {
       for (const item of cartItems) {
         const newStock = item.artwork.stock_quantity - item.quantity;
         const { error: stockError } = await supabase
-          .from('artworks')
+          .from("artworks")
           .update({ stock_quantity: newStock })
-          .eq('id', item.artwork.id);
+          .eq("id", item.artwork.id);
 
         if (stockError) throw stockError;
       }
 
       // Clear cart
       const { error: deleteError } = await supabase
-        .from('cart_items')
+        .from("cart_items")
         .delete()
-        .eq('user_id', userId);
+        .eq("user_id", userId);
 
       if (deleteError) throw deleteError;
 
@@ -251,8 +277,8 @@ const Cart = () => {
         title: "Success!",
         description: "Order placed successfully",
       });
-      
-      navigate('/orders');
+
+      navigate("/orders");
     } catch (error) {
       toast({
         title: "Error",
@@ -262,14 +288,16 @@ const Cart = () => {
     }
   };
 
-
-  const total = cartItems.reduce((sum, item) => sum + (item.artwork.price * item.quantity), 0);
+  const total = cartItems.reduce(
+    (sum, item) => sum + item.artwork.price * item.quantity,
+    0
+  );
   const paymentAmount = total * 0.7;
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      
+
       <div className="container py-8">
         <h1 className="mb-8 text-3xl font-bold">Shopping Cart</h1>
 
@@ -284,8 +312,10 @@ const Cart = () => {
             <CardContent className="text-center">
               <ShoppingBag className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
               <h2 className="text-2xl font-semibold mb-2">Your cart is empty</h2>
-              <p className="text-muted-foreground mb-4">Start adding some amazing artworks!</p>
-              <Button onClick={() => navigate('/')}>Browse Artworks</Button>
+              <p className="text-muted-foreground mb-4">
+                Start adding some amazing artworks!
+              </p>
+              <Button onClick={() => navigate("/")}>Browse Artworks</Button>
             </CardContent>
           </Card>
         ) : (
@@ -305,13 +335,21 @@ const Cart = () => {
                         <p className="text-sm text-muted-foreground">
                           Quantity: {item.quantity}
                         </p>
-                        <p className={`text-xs ${item.artwork.stock_quantity < item.quantity ? 'text-destructive' : 'text-muted-foreground'}`}>
-                          {item.artwork.stock_quantity > 0 
-                            ? `${item.artwork.stock_quantity} available` 
-                            : 'Out of stock'}
+                        <p
+                          className={`text-xs ${
+                            item.artwork.stock_quantity < item.quantity
+                              ? "text-destructive"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {item.artwork.stock_quantity > 0
+                            ? `${item.artwork.stock_quantity} available`
+                            : "Out of stock"}
                         </p>
                       </div>
-                      <p className="font-bold text-primary">₹{item.artwork.price.toFixed(2)}</p>
+                      <p className="font-bold text-primary">
+                        ₹{item.artwork.price.toFixed(2)}
+                      </p>
                     </div>
                     <Button
                       variant="ghost"
@@ -330,27 +368,35 @@ const Cart = () => {
                 <CardContent className="p-6 space-y-4">
                   <h2 className="text-xl font-bold">Delivery Address</h2>
                   {addresses.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No saved addresses</p>
+                    <p className="text-sm text-muted-foreground">
+                      No saved addresses
+                    </p>
                   ) : (
                     <div className="space-y-2">
                       {addresses.map((address) => (
                         <div
                           key={address.id}
                           className={`p-3 border rounded-lg cursor-pointer transition-colors ${
-                            selectedAddress === address.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                            selectedAddress === address.id
+                              ? "border-primary bg-primary/5"
+                              : "border-border hover:border-primary/50"
                           }`}
                           onClick={() => setSelectedAddress(address.id)}
                         >
                           <p className="font-semibold">{address.full_name}</p>
                           <p className="text-sm">{address.phone}</p>
                           <p className="text-sm text-muted-foreground">
-                            {address.address_line1}, {address.city}, {address.state} - {address.postal_code}
+                            {address.address_line1}, {address.city},{" "}
+                            {address.state} - {address.postal_code}
                           </p>
                         </div>
                       ))}
                     </div>
                   )}
-                  <Dialog open={showAddressDialog} onOpenChange={setShowAddressDialog}>
+                  <Dialog
+                    open={showAddressDialog}
+                    onOpenChange={setShowAddressDialog}
+                  >
                     <DialogTrigger asChild>
                       <Button variant="outline" className="w-full">
                         <Plus className="mr-2 h-4 w-4" />
@@ -367,14 +413,24 @@ const Cart = () => {
                             <Label>Full Name</Label>
                             <Input
                               value={addressForm.full_name}
-                              onChange={(e) => setAddressForm({...addressForm, full_name: e.target.value})}
+                              onChange={(e) =>
+                                setAddressForm({
+                                  ...addressForm,
+                                  full_name: e.target.value,
+                                })
+                              }
                             />
                           </div>
                           <div className="space-y-2">
                             <Label>Phone</Label>
                             <Input
                               value={addressForm.phone}
-                              onChange={(e) => setAddressForm({...addressForm, phone: e.target.value})}
+                              onChange={(e) =>
+                                setAddressForm({
+                                  ...addressForm,
+                                  phone: e.target.value,
+                                })
+                              }
                             />
                           </div>
                         </div>
@@ -382,14 +438,24 @@ const Cart = () => {
                           <Label>Address Line 1</Label>
                           <Input
                             value={addressForm.address_line1}
-                            onChange={(e) => setAddressForm({...addressForm, address_line1: e.target.value})}
+                            onChange={(e) =>
+                              setAddressForm({
+                                ...addressForm,
+                                address_line1: e.target.value,
+                              })
+                            }
                           />
                         </div>
                         <div className="space-y-2">
                           <Label>Address Line 2 (Optional)</Label>
                           <Input
                             value={addressForm.address_line2}
-                            onChange={(e) => setAddressForm({...addressForm, address_line2: e.target.value})}
+                            onChange={(e) =>
+                              setAddressForm({
+                                ...addressForm,
+                                address_line2: e.target.value,
+                              })
+                            }
                           />
                         </div>
                         <div className="grid grid-cols-2 gap-4">
@@ -397,14 +463,24 @@ const Cart = () => {
                             <Label>City</Label>
                             <Input
                               value={addressForm.city}
-                              onChange={(e) => setAddressForm({...addressForm, city: e.target.value})}
+                              onChange={(e) =>
+                                setAddressForm({
+                                  ...addressForm,
+                                  city: e.target.value,
+                                })
+                              }
                             />
                           </div>
                           <div className="space-y-2">
                             <Label>State</Label>
                             <Input
                               value={addressForm.state}
-                              onChange={(e) => setAddressForm({...addressForm, state: e.target.value})}
+                              onChange={(e) =>
+                                setAddressForm({
+                                  ...addressForm,
+                                  state: e.target.value,
+                                })
+                              }
                             />
                           </div>
                         </div>
@@ -413,18 +489,30 @@ const Cart = () => {
                             <Label>Postal Code</Label>
                             <Input
                               value={addressForm.postal_code}
-                              onChange={(e) => setAddressForm({...addressForm, postal_code: e.target.value})}
+                              onChange={(e) =>
+                                setAddressForm({
+                                  ...addressForm,
+                                  postal_code: e.target.value,
+                                })
+                              }
                             />
                           </div>
                           <div className="space-y-2">
                             <Label>Country</Label>
                             <Input
                               value={addressForm.country}
-                              onChange={(e) => setAddressForm({...addressForm, country: e.target.value})}
+                              onChange={(e) =>
+                                setAddressForm({
+                                  ...addressForm,
+                                  country: e.target.value,
+                                })
+                              }
                             />
                           </div>
                         </div>
-                        <Button onClick={handleSaveAddress} className="w-full">Save Address</Button>
+                        <Button onClick={handleSaveAddress} className="w-full">
+                          Save Address
+                        </Button>
                       </div>
                     </DialogContent>
                   </Dialog>
@@ -436,11 +524,15 @@ const Cart = () => {
                   <h2 className="text-xl font-bold">Order Summary</h2>
                   <div className="space-y-2">
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">Items ({cartItems.length})</span>
+                      <span className="text-muted-foreground">
+                        Items ({cartItems.length})
+                      </span>
                       <span>₹{total.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Total Amount</span>
+                      <span className="text-muted-foreground">
+                        Total Amount
+                      </span>
                       <span>₹{total.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between font-semibold text-primary">
@@ -454,11 +546,19 @@ const Cart = () => {
                     <div className="border-t pt-2">
                       <div className="flex justify-between font-bold text-lg">
                         <span>Payment Amount</span>
-                        <span className="text-primary">₹{paymentAmount.toFixed(2)}</span>
+                        <span className="text-primary">
+                          ₹{paymentAmount.toFixed(2)}
+                        </span>
                       </div>
                     </div>
                   </div>
-                  <Button className="w-full" onClick={handleCheckout} disabled={!selectedAddress}>
+
+                  {/* THIS IS THE MODIFIED BUTTON */}
+                  <Button
+                    className="w-full"
+                    onClick={triggerCheckout}
+                    disabled={!selectedAddress}
+                  >
                     Buy Now - Pay ₹{paymentAmount.toFixed(2)}
                   </Button>
                 </CardContent>
@@ -466,6 +566,18 @@ const Cart = () => {
             </div>
           </div>
         )}
+
+        {/* THIS IS THE NEW MODAL COMPONENT */}
+        <DummyPaymentGateway
+          isOpen={showPaymentModal}
+          onOpenChange={setShowPaymentModal}
+          amount={paymentAmount}
+          onPaymentSuccess={() => {
+            // This runs the original handleCheckout *after* the
+            // "Done" button is clicked on the success screen.
+            handleCheckout();
+          }}
+        />
       </div>
     </div>
   );
