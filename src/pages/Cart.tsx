@@ -205,7 +205,10 @@ const Cart = () => {
   // HERE IS THE FIXED, ATOMIC CHECKOUT FUNCTION
   // ------------------------------------------------------------------
   const handleCheckout = async () => {
-    if (!userId || cartItems.length === 0) return;
+    if (!userId || cartItems.length === 0) {
+      // Don't show a toast, the modal will handle it
+      return;
+    }
 
     if (!selectedAddress) {
       toast({
@@ -220,7 +223,6 @@ const Cart = () => {
       // This is the ONLY call we make now.
       // All the logic is in the database function.
       
-      // THIS IS THE FIXED LINE (no underscore)
       const { data, error } = await supabase.rpc('handle_checkout', {
         p_buyer_id: userId,
         p_delivery_address_id: selectedAddress,
@@ -247,13 +249,9 @@ const Cart = () => {
         errorMessage = error.message.split('ERROR: ').pop()?.split('CONTEXT:').shift() || "An item in your cart is out of stock.";
       }
       
-      toast({
-        title: "Order Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      // Refetch cart items in case stock changed
-      if (userId) fetchCartItems(userId);
+      // This error will be caught and shown in the modal
+      // We re-throw it so the modal's `catch` block can see it
+      throw new Error(errorMessage);
     }
   };
   // ------------------------------------------------------------------
@@ -542,16 +540,14 @@ const Cart = () => {
           </div>
         )}
 
-        {/* THIS IS THE NEW MODAL COMPONENT */}
+        {/* THIS IS THE ONLY CHANGE.
+          'onPaymentSuccess' has been replaced with 'onSubmit'.
+        */}
         <DummyPaymentGateway
           isOpen={showPaymentModal}
           onOpenChange={setShowPaymentModal}
           amount={paymentAmount}
-          onPaymentSuccess={() => {
-            // This runs the new handleCheckout *after* the
-            // "Done" button is clicked on the success screen.
-            handleCheckout();
-          }}
+          onSubmit={handleCheckout}
         />
       </div>
     </div>

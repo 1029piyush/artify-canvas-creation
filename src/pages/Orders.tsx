@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import Navbar from "@/components/Navbar";
-// HERE ARE THE CHANGES: Added CardFooter and Button
 import {
   Card,
   CardContent,
@@ -12,7 +11,6 @@ import {
   CardFooter,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-// END OF CHANGES
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Package, Calendar, DollarSign } from "lucide-react";
@@ -27,13 +25,12 @@ interface OrderItem {
   artworks: {
     title: string;
     image_url: string;
-    // HERE IS A CHANGE: We need the stock to restore it
     stock_quantity: number;
   };
   profiles: {
     full_name: string;
   };
-  artist_id: string; // Added artist_id here for the main query
+  artist_id: string;
 }
 
 const Orders = () => {
@@ -41,7 +38,6 @@ const Orders = () => {
   const { toast } = useToast();
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
-  // HERE IS A CHANGE: New state to track which order is being cancelled
   const [cancellingId, setCancellingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -114,7 +110,6 @@ const Orders = () => {
     }
   };
 
-  // HERE IS THE NEW FUNCTION TO HANDLE CANCELLATION
   const handleCancelOrder = async (order: OrderItem) => {
     setCancellingId(order.id);
     try {
@@ -135,12 +130,8 @@ const Orders = () => {
 
       if (orderError) throw orderError;
 
-      // 3. Update the UI state locally
-      setOrders(
-        orders.map((o) =>
-          o.id === order.id ? { ...o, status: "cancelled" } : o
-        )
-      );
+      // 3. Remove the order from the UI state
+      setOrders(orders.filter((o) => o.id !== order.id));
 
       toast({
         title: "Order Cancelled",
@@ -156,7 +147,6 @@ const Orders = () => {
       setCancellingId(null);
     }
   };
-  // END OF NEW FUNCTION
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -257,8 +247,7 @@ const Orders = () => {
                       </h3>
                       <p className="text-sm text-muted-foreground mb-3">
                         Artist: {order.profiles?.full_name || "Unknown Artist"}
-                      </p>
-
+                      </p>{/* <-- THIS WAS THE TYPO, changed </S> to </p> --> */}
                       <div className="flex items-center gap-6 text-sm">
                         <div className="flex items-center gap-2">
                           <Package className="h-4 w-4 text-muted-foreground" />
@@ -275,7 +264,6 @@ const Orders = () => {
                   </div>
                 </CardContent>
 
-                {/* HERE IS THE NEW CARD FOOTER WITH THE BUTTON */}
                 {order.status === "pending" && (
                   <CardFooter className="bg-muted/30 p-4 flex justify-end">
                     <Button
@@ -289,7 +277,6 @@ const Orders = () => {
                     </Button>
                   </CardFooter>
                 )}
-                {/* END OF NEW SECTION */}
               </Card>
             ))}
           </div>

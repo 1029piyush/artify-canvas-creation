@@ -5,6 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import { ArtworkPreviewModal } from "@/components/ui/artwork-preview-modal";
+// HERE IS A NEW IMPORT
+import { Badge } from "@/components/ui/badge";
 
 interface ArtworkCardProps {
   id: string;
@@ -135,16 +137,33 @@ const ArtworkCard = ({ id, title, description, price, imageUrl, artistId, stockQ
   return (
     <>
       <Card className="overflow-hidden group cursor-pointer transition-transform duration-300 hover:scale-[1.02]">
+        {/* HERE ARE THE CHANGES:
+          1. Added conditional blur/grayscale to the <img>
+          2. Added the "Out of Stock" Badge
+        */}
         <CardContent className="p-0" onClick={() => setIsPreviewOpen(true)}>
           <div className="relative aspect-square">
             <img
               src={imageUrl}
               alt={title}
-              className="object-cover w-full h-full transition-transform duration-300 group-hover:scale-105"
+              className={`object-cover w-full h-full transition-all duration-300 group-hover:scale-105 ${
+                stockQuantity <= 0 ? "grayscale filter blur-sm" : ""
+              }`}
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors duration-300" />
+            
+            {stockQuantity <= 0 && (
+              <Badge
+                variant="destructive"
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-base"
+              >
+                Out of Stock
+              </Badge>
+            )}
           </div>
         </CardContent>
+        {/* END OF CHANGES */}
+        
         <CardFooter className="flex flex-col gap-4 p-4">
           <div className="w-full">
             <h3 className="font-semibold text-lg line-clamp-1">{title}</h3>
@@ -153,7 +172,10 @@ const ArtworkCard = ({ id, title, description, price, imageUrl, artistId, stockQ
             )}
             <div className="flex items-center justify-between mt-2">
               <p className="font-bold text-xl text-primary">₹{price.toFixed(2)}</p>
-              <p className={`text-sm font-medium ${stockQuantity > 0 ? 'text-muted-foreground' : 'text-destructive'}`}>
+              {/* HERE IS A CHANGE: Made "Out of Stock" more visible */}
+              <p className={`text-sm font-medium ${
+                stockQuantity > 0 ? 'text-muted-foreground' : 'text-red-500 font-bold'
+              }`}>
                 {stockQuantity > 0 ? `${stockQuantity} in stock` : 'Out of Stock'}
               </p>
             </div>

@@ -1,735 +1,193 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "@/components/Navbar";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Trash2, Package, MessageSquare, Banknote } from "lucide-react";
-import { z } from "zod";
+import { DollarSign, Package } from "lucide-react";
 
-const artworkSchema = z.object({
-  title: z.string().min(3, "Title must be at least 3 characters"),
-  description: z.string().min(10, "Description must be at least 10 characters"),
-  price: z.number().min(1, "Price must be greater than 0"),
-  category: z.string().optional(),
-  stock_quantity: z.number().min(1, "Stock must be at least 1").max(10, "Maximum 10 items allowed"),
-});
-
-// NEW SCHEMA for bank details
-const bankDetailsSchema = z.object({
-  bank_name: z.string().min(2, "Bank Name is required"),
-  account_holder_name: z.string().min(2, "Account Holder Name is required"),
-  account_number: z.string().min(8, "Account Number must be at least 8 digits").max(20, "Account Number is too long"),
-  ifsc_code: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, "Invalid IFSC Code format (e.g., SBIN0001234)"),
-  upi_id: z.string().optional(),
-});
-
-interface Artwork {
-  id: string;
-  title: string;
-  description: string | null;
-  price: number;
-  image_url: string;
-  category: string | null;
-  stock_quantity: number;
-}
-
-interface Order {
+// 1. Define the types for the data we are fetching
+interface SaleItem {
   id: string;
   quantity: number;
-  total_price: number;
-  status: string;
   created_at: string;
+  order: {
+    id: string;
+    status: string;
+    delivery_addresses: {
+      full_name: string;
+      phone: string;
+      address_line1: string;
+      city: string;
+    };
+  };
   artwork: {
     title: string;
+    price: number;
     image_url: string;
   };
-}
-
-interface CustomRequest {
-  id: string;
-  title: string;
-  description: string;
-  budget: number | null;
-  status: string;
-  created_at: string;
-  artist_id: string | null;
-  buyer: {
-    email: string;
-    full_name: string | null;
-  };
-}
-
-// NEW INTERFACE for bank details
-interface BankDetails {
-  bank_name: string;
-  account_holder_name: string;
-  account_number: string;
-  ifsc_code: string;
 }
 
 const ArtistDashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [userId, setUserId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [artworks, setArtworks] = useState<Artwork[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [customRequests, setCustomRequests] = useState<CustomRequest[]>([]);
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    price: "",
-    category: "",
-    stock_quantity: "1",
-  });
-  
-  // NEW STATE for bank details
-  const [bankDetails, setBankDetails] = useState<BankDetails | null>(null);
-  const [bankForm, setBankForm] = useState<BankDetails>({
-    bank_name: "",
-    account_holder_name: "",
-    account_number: "",
-    ifsc_code: "",
-  });
-  const [bankLoading, setBankLoading] = useState(false);
-
+  const [sales, setSales] = useState<SaleItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [artistId, setArtistId] = useState<string | null>(null);
 
   useEffect(() => {
     checkAuth();
   }, []);
 
+  // 2. Check auth and get the artist's ID
   const checkAuth = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      navigate('/auth');
+      navigate("/auth");
       return;
     }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('user_type')
-      .eq('id', session.user.id)
-      .single();
-
-    if (profile?.user_type !== 'artist') {
-      toast({
-        title: "Access Denied",
-        description: "Only artists can access this page",
-        variant: "destructive",
-      });
-      navigate('/');
-      return;
-    }
-
-    setUserId(session.user.id);
-    fetchArtworks(session.user.id);
-    fetchOrders(session.user.id);
-    fetchCustomRequests();
-    fetchBankDetails(session.user.id); // <-- NEW: Fetch bank details
+    setArtistId(session.user.id);
+    fetchSales(session.user.id);
   };
 
-  // NEW FUNCTION: Fetch artist's bank details
-  const fetchBankDetails = async (uid: string) => {
-    const { data } = await supabase
-      .from('artist_bank_details')
-      .select('*')
-      .eq('user_id', uid)
-      .single();
-
-    if (data) {
-      setBankDetails(data);
-      setBankForm({
-        bank_name: data.bank_name,
-        account_holder_name: data.account_holder_name,
-        account_number: data.account_number,
-        ifsc_code: data.ifsc_code,
-      });
-    } else {
-      setBankDetails(null);
-      // Keep form empty for new input
-    }
-  };
-
-  // NEW FUNCTION: Handle bank form changes
-  const handleBankFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setBankForm({
-      ...bankForm,
-      [e.target.id]: e.target.value,
-    });
-  };
-
-  // NEW FUNCTION: Handle bank form submission
-  const handleBankFormSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userId) return;
-
-    try {
-      const validatedData = bankDetailsSchema.parse(bankForm);
-
-      setBankLoading(true);
-
-      const dataToInsert: any = {
-        bank_name: validatedData.bank_name,
-        account_holder_name: validatedData.account_holder_name,
-        account_number: validatedData.account_number,
-        ifsc_code: validatedData.ifsc_code,
-        user_id: userId!,
-      };
-      if (validatedData.upi_id) {
-        dataToInsert.upi_id = validatedData.upi_id;
-      }
-
-      const { error } = await supabase
-        .from('artist_bank_details')
-        .upsert([dataToInsert]);
-
-      if (error) throw error;
-
-      toast({
-        title: "Success!",
-        description: "Bank details saved successfully",
-      });
-      fetchBankDetails(userId);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        toast({
-          title: "Validation Error",
-          description: error.errors[0].message,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to save bank details",
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setBankLoading(false);
-    }
-  };
-  
-  const fetchArtworks = async (uid: string) => {
-    const { data } = await supabase
-      .from('artworks')
-      .select('*')
-      .eq('artist_id', uid)
-      .order('created_at', { ascending: false });
-
-    if (data) {
-      setArtworks(data as Artwork[]);
-    }
-  };
-
-  const fetchOrders = async (uid: string) => {
-    const { data } = await supabase
-      .from('orders')
+  // 3. The key function to fetch sales for this specific artist
+  const fetchSales = async (uid: string) => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("order_items")
       .select(`
         id,
         quantity,
-        total_price,
-        status,
         created_at,
+        order:orders (
+          id,
+          status,
+          delivery_addresses (full_name, phone, address_line1, city)
+        ),
         artwork:artworks (
           title,
+          price,
           image_url
         )
       `)
-      .eq('artist_id', uid)
-      .order('created_at', { ascending: false });
-
-    if (data) {
-      setOrders(data as Order[]);
-    }
-  };
-
-  const fetchCustomRequests = async () => {
-    const { data } = await supabase
-      .from('custom_requests')
-      .select(`
-        id,
-        title,
-        description,
-        budget,
-        status,
-        created_at,
-        buyer_id,
-        artist_id
-      `)
-      .order('created_at', { ascending: false });
-
-    if (data) {
-      // Fetch buyer profiles separately
-      const buyerIds = data.map(req => req.buyer_id);
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, email, full_name')
-        .in('id', buyerIds);
-
-      const requestsWithBuyers = data.map(req => ({
-        ...req,
-        buyer: profiles?.find(p => p.id === req.buyer_id) || { email: 'Unknown', full_name: null }
-      }));
-
-      setCustomRequests(requestsWithBuyers as CustomRequest[]);
-    }
-  };
-
-  const handleClaimRequest = async (requestId: string) => {
-    const { error } = await supabase
-      .from('custom_requests')
-      .update({ artist_id: userId, status: 'accepted' })
-      .eq('id', requestId);
+      // This is the filter: only get items where the artwork's
+      // artist_id matches the currently logged-in user's ID.
+      .eq("artworks.artist_id", uid)
+      .order("created_at", { ascending: false });
 
     if (error) {
       toast({
         title: "Error",
-        description: "Failed to claim request",
+        description: "Failed to fetch sales history.",
         variant: "destructive",
       });
+      console.error(error);
     } else {
-      toast({
-        title: "Success",
-        description: "Request claimed successfully",
-      });
-      fetchCustomRequests();
+      setSales(data as SaleItem[]);
     }
+    setLoading(false);
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setImageFile(e.target.files[0]);
-    }
-  };
+  const totalRevenue = sales.reduce(
+    (sum, item) => sum + item.artwork.price * item.quantity,
+    0
+  );
+  const totalItemsSold = sales.reduce((sum, item) => sum + item.quantity, 0);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!imageFile) {
-      toast({
-        title: "Error",
-        description: "Please select an image",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      const validatedData = artworkSchema.parse({
-        ...formData,
-        price: parseFloat(formData.price),
-        stock_quantity: parseInt(formData.stock_quantity),
-      });
-
-      setLoading(true);
-
-      // Upload image
-      const fileExt = imageFile.name.split('.').pop();
-      const fileName = `${userId}-${Date.now()}.${fileExt}`;
-      const { error: uploadError, data: uploadData } = await supabase.storage
-        .from('artworks')
-        .upload(fileName, imageFile);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('artworks')
-        .getPublicUrl(fileName);
-
-      // Create artwork
-      const { error: insertError } = await supabase
-        .from('artworks')
-        .insert({
-          artist_id: userId!,
-          title: validatedData.title,
-          description: validatedData.description,
-          price: validatedData.price,
-          category: validatedData.category || null,
-          image_url: publicUrl,
-          is_available: true,
-          stock_quantity: validatedData.stock_quantity,
-        });
-
-      if (insertError) throw insertError;
-
-      toast({
-        title: "Success!",
-        description: "Artwork uploaded successfully",
-      });
-
-      setFormData({ title: "", description: "", price: "", category: "", stock_quantity: "1" });
-      setImageFile(null);
-      if (userId) fetchArtworks(userId);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        toast({
-          title: "Validation Error",
-          description: error.errors[0].message,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Error",
-          description: "Failed to upload artwork",
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const deleteArtwork = async (id: string) => {
-    const { error } = await supabase
-      .from('artworks')
-      .delete()
-      .eq('id', id);
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete artwork",
-        variant: "destructive",
-      });
-    } else {
-      toast({
-        title: "Success",
-        description: "Artwork deleted",
-      });
-      if (userId) fetchArtworks(userId);
-    }
-  };
-
+  // 4. Render the page
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      
       <div className="container py-8">
         <h1 className="mb-8 text-3xl font-bold">Artist Dashboard</h1>
 
-        <Tabs defaultValue="upload" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="upload">Upload Artwork</TabsTrigger>
-            <TabsTrigger value="artworks">My Artworks</TabsTrigger>
-            <TabsTrigger value="orders">Orders</TabsTrigger>
-            <TabsTrigger value="custom-requests">Custom Requests</TabsTrigger>
-            <TabsTrigger value="bank-details">Bank Details</TabsTrigger>
-          </TabsList>
+        {/* Stats Cards */}
+        <div className="grid gap-4 md:grid-cols-2 mb-8">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                Total Revenue
+              </CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                ₹{totalRevenue.toFixed(2)}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Items Sold</CardTitle>
+              <Package className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{totalItemsSold}</div>
+            </CardContent>
+          </Card>
+        </div>
 
-          <TabsContent value="upload">
-            <Card>
-              <CardHeader>
-                <CardTitle>Upload New Artwork</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="image">Artwork Image</Label>
-                    <div className="flex items-center gap-4">
-                      <Input
-                        id="image"
-                        type="file"
-                        accept="image/*"
-                        onChange={handleImageChange}
-                        required
-                      />
-                      {imageFile && (
-                        <span className="text-sm text-muted-foreground">
-                          {imageFile.name}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="title">Title</Label>
-                    <Input
-                      id="title"
-                      placeholder="Artwork title"
-                      value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="description">Description</Label>
-                    <Textarea
-                      id="description"
-                      placeholder="Describe your artwork..."
-                      rows={4}
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="price">Price (₹)</Label>
-                      <Input
-                        id="price"
-                        type="number"
-                        step="0.01"
-                        placeholder="0.00"
-                        value={formData.price}
-                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="stock_quantity">Stock Quantity</Label>
-                      <Input
-                        id="stock_quantity"
-                        type="number"
-                        min="1"
-                        max="10"
-                        placeholder="1"
-                        value={formData.stock_quantity}
-                        onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="category">Category (Optional)</Label>
-                      <Input
-                        id="category"
-                        placeholder="e.g., Abstract, Portrait"
-                        value={formData.category}
-                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <Button type="submit" className="w-full" disabled={loading}>
-                    <Upload className="mr-2 h-4 w-4" />
-                    {loading ? "Uploading..." : "Upload Artwork"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="artworks">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {artworks.map((artwork) => (
-                <Card key={artwork.id}>
-                  <CardContent className="p-0">
-                    <img
-                      src={artwork.image_url}
-                      alt={artwork.title}
-                      className="aspect-square w-full object-cover rounded-t-lg"
-                    />
-                    <div className="p-4 space-y-2">
-                      <h3 className="font-semibold">{artwork.title}</h3>
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {artwork.description}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <p className="font-bold text-primary">₹{artwork.price.toFixed(2)}</p>
-                        <p className="text-sm text-muted-foreground">Stock: {artwork.stock_quantity}</p>
-                      </div>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => deleteArtwork(artwork.id)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Delete
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-              {artworks.length === 0 && (
-                <Card className="col-span-full">
-                  <CardContent className="py-12 text-center">
-                    <p className="text-muted-foreground">No artworks uploaded yet</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="orders">
-            <div className="space-y-4">
-              {orders.map((order) => (
-                <Card key={order.id}>
-                  <CardContent className="flex gap-4 p-4">
-                    <img
-                      src={order.artwork.image_url}
-                      alt={order.artwork.title}
-                      className="h-20 w-20 rounded-lg object-cover"
-                    />
-                    <div className="flex-1">
-                      <h3 className="font-semibold">{order.artwork.title}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Quantity: {order.quantity} • Total: ₹{order.total_price.toFixed(2)}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Status: <span className="font-medium capitalize">{order.status}</span>
-                      </p>
-                    </div>
-                    <Package className="h-8 w-8 text-muted-foreground" />
-                  </CardContent>
-                </Card>
-              ))}
-              {orders.length === 0 && (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <p className="text-muted-foreground">No orders yet</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="custom-requests">
-            <div className="space-y-4">
-              {customRequests.map((request) => (
-                <Card key={request.id}>
-                  <CardContent className="p-6 space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3">
-                        <MessageSquare className="h-6 w-6 text-primary mt-1" />
-                        <div className="space-y-1">
-                          <h3 className="font-semibold text-lg">{request.title}</h3>
-                          <p className="text-sm text-muted-foreground">{request.description}</p>
-                        </div>
-                      </div>
-                      <span className="text-xs px-3 py-1 rounded-full bg-secondary capitalize">
-                        {request.status}
-                      </span>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-4 pt-3 border-t">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Requested by</p>
-                        <p className="font-medium">{request.buyer.full_name || 'Unknown'}</p>
-                        <p className="text-sm text-muted-foreground">{request.buyer.email}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Budget</p>
-                        <p className="font-bold text-primary">
-                          {request.budget ? `₹${request.budget.toFixed(2)}` : 'Not specified'}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <p className="text-xs text-muted-foreground pt-2">
-                      Requested on {new Date(request.created_at).toLocaleDateString()}
+        {/* Sales List */}
+        <h2 className="mb-4 text-2xl font-semibold">Sales History</h2>
+        {loading ? (
+          <div className="space-y-4">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-32 animate-pulse rounded-lg bg-muted" />
+            ))}
+          </div>
+        ) : sales.length === 0 ? (
+          <Card>
+            <CardContent className="p-12 text-center">
+              <h3 className="text-xl font-medium">No sales yet</h3>
+              <p className="text-muted-foreground">
+                When a buyer purchases your art, it will show up here.
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {sales.map((item) => (
+              <Card key={item.id}>
+                <CardContent className="flex gap-4 p-4">
+                  <img
+                    src={item.artwork.image_url}
+                    alt={item.artwork.title}
+                    className="h-24 w-24 rounded-lg object-cover"
+                  />
+                  <div className="flex-1 space-y-1">
+                    <h3 className="font-semibold">{item.artwork.title}</h3>
+                    <p className="text-sm">
+                      <span className="font-medium">Quantity:</span>{" "}
+                      {item.quantity}
                     </p>
-
-                    {request.status === 'pending' && !request.artist_id && (
-                      <Button 
-                        onClick={() => handleClaimRequest(request.id)}
-                        className="w-full mt-4"
-                      >
-                        Accept & Claim Request
-                      </Button>
-                    )}
-                    {request.artist_id === userId && (
-                      <div className="mt-4 p-3 bg-primary/10 rounded-lg">
-                        <p className="text-sm font-medium text-primary">You claimed this request</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-              {customRequests.length === 0 && (
-                <Card>
-                  <CardContent className="py-12 text-center">
-                    <p className="text-muted-foreground">No custom requests yet</p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* NEW TAB CONTENT: Bank Details */}
-          <TabsContent value="bank-details"> 
-            <Card>
-              <CardHeader>
-                <CardTitle>{bankDetails ? 'Update Bank Details' : 'Add Bank Details'}</CardTitle>
-                <CardDescription>
-                  Your bank details are required to receive payments from art sales. This information is private and secure.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleBankFormSubmit} className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="bank_name">Bank Name</Label>
-                    <Input
-                      id="bank_name"
-                      placeholder="e.g., State Bank of India"
-                      value={bankForm.bank_name}
-                      onChange={handleBankFormChange}
-                      required
-                    />
+                    <p className="text-sm">
+                      <span className="font-medium">Price per item:</span> ₹
+                      {item.artwork.price.toFixed(2)}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Order ID: {item.order.id}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Sold on: {new Date(item.created_at).toLocaleDateString()}
+                    </p>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="account_holder_name">Account Holder Name</Label>
-                    <Input
-                      id="account_holder_name"
-                      placeholder="Full name as per bank records"
-                      value={bankForm.account_holder_name}
-                      onChange={handleBankFormChange}
-                      required
-                    />
+                  <div className="text-right">
+                    <p className="text-lg font-bold text-primary">
+                      +₹{(item.artwork.price * item.quantity).toFixed(2)}
+                    </p>
+                    <p className="text-sm font-medium">Shipping to:</p>
+                    <p className="text-sm text-muted-foreground">
+                      {item.order.delivery_addresses.full_name}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {item.order.delivery_addresses.city}
+                    </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="account_number">Account Number</Label>
-                      <Input
-                        id="account_number"
-                        placeholder="1234567890"
-                        type="text"
-                        value={bankForm.account_number}
-                        onChange={handleBankFormChange}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="ifsc_code">IFSC Code</Label>
-                      <Input
-                        id="ifsc_code"
-                        placeholder="SBIN0001234"
-                        type="text"
-                        value={bankForm.ifsc_code.toUpperCase()}
-                        onChange={handleBankFormChange}
-                        required
-                      />
-                    </div>
-                  </div>
-                  
-                  <Button type="submit" className="w-full" disabled={bankLoading}>
-                    <Banknote className="mr-2 h-4 w-4" />
-                    {bankLoading ? "Saving..." : (bankDetails ? "Update Details" : "Save Details")}
-                  </Button>
-                </form>
-                {bankDetails && (
-                  <div className="mt-6 p-4 bg-secondary/10 border border-secondary/50 rounded-lg">
-                    <h4 className="font-semibold text-base mb-2 text-primary">Your Saved Bank Details:</h4>
-                    <p className="text-sm"><strong>Bank Name:</strong> {bankDetails.bank_name}</p>
-                    <p className="text-sm"><strong>Account Holder:</strong> {bankDetails.account_holder_name}</p>
-                    <p className="text-sm"><strong>Account Number:</strong> {bankDetails.account_number}</p>
-                    <p className="text-sm"><strong>IFSC Code:</strong> {bankDetails.ifsc_code}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

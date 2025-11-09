@@ -3,7 +3,6 @@ import Navbar from "@/components/Navbar";
 import ArtworkCard from "@/components/ArtworkCard";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-// HERE IS A CHANGE: Added 'Banknote' icon
 import { Palette, Sparkles, Shield, Banknote } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -26,10 +25,12 @@ const Index = () => {
   }, []);
 
   const fetchArtworks = async () => {
+    // THIS IS THE CHANGED QUERY
+    // We REMOVED .gt('stock_quantity', 0) to show all items
     const { data, error } = await supabase
       .from('artworks')
       .select('*')
-      .eq('is_available', true)
+      .eq('is_available', true) 
       .order('created_at', { ascending: false })
       .limit(12);
 
@@ -109,8 +110,7 @@ const Index = () => {
         </div>
       </section>
 
-      {/* HERE IS THE NEW SECTION YOU REQUESTED
-      */}
+      {/* Buy with Confidence Section */}
       <section className="py-16 bg-primary/5">
         <div className="container">
           <div className="mx-auto max-w-3xl text-center">
@@ -138,7 +138,6 @@ const Index = () => {
           </div>
         </div>
       </section>
-      {/* END OF NEW SECTION */}
 
 
       {/* Artworks Gallery */}
