@@ -15,6 +15,7 @@ import BuyerRequests from "./pages/BuyerRequests";
 import Payment from "./pages/Payment";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import UploadArtwork from "./pages/UploadArtwork"; // 1. ADD THIS IMPORT
 
 const queryClient = new QueryClient();
 
@@ -33,6 +34,7 @@ const App = () => (
           <Route path="/orders" element={<Orders />} />
           <Route path="/custom-art" element={<CustomArt />} />
           <Route path="/artist-dashboard" element={<ArtistDashboard />} />
+          <Route path="/upload-artwork" element={<UploadArtwork />} /> {/* 2. ADD THIS ROUTE */}
           <Route path="/buyer-requests" element={<BuyerRequests />} />
           <Route path="/payment" element={<Payment />} />
           <Route path="/profile" element={<Profile />} />
