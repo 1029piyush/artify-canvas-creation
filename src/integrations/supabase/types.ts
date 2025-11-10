@@ -377,6 +377,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      handle_checkout: {
+        Args: { p_buyer_id: string; p_delivery_address_id: string }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

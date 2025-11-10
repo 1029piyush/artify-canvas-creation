@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, CheckCircle, Image as ImageIcon } from "lucide-react";
+import { Loader2, Send, CheckCircle } from "lucide-react";
 import { z } from "zod";
 
 // Zod schema for validation
@@ -23,11 +23,10 @@ interface CustomRequest {
   title: string;
   description: string;
   budget: number | null;
-  status: "pending" | "accepted" | "completed" | "cancelled";
+  status: string;
   created_at: string;
   artist_id: string | null;
-  inspiration_image_url: string | null; // Added field
-  artist: { // Artist profile data
+  artist?: {
     full_name: string | null;
     email: string;
   } | null;
@@ -40,8 +39,6 @@ const CustomArt = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [requests, setRequests] = useState<CustomRequest[]>([]);
-  const [inspirationFile, setInspirationFile] = useState<File | null>(null);
-  const [inspirationLoading, setInspirationLoading] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -66,29 +63,21 @@ const CustomArt = () => {
   const fetchRequests = async (uid: string) => {
     const { data, error } = await supabase
       .from('custom_requests')
-      .select(`
-        id, title, description, budget, status, created_at, artist_id, inspiration_image_url,
-        artist:profiles!artist_id (full_name, email)
-      `)
+      .select('*')
       .eq('buyer_id', uid)
       .order('created_at', { ascending: false });
 
     if (error) {
       toast({ title: "Error", description: "Failed to fetch requests.", variant: "destructive" });
+      setRequests([]);
     } else {
-      setRequests(data as CustomRequest[]);
+      setRequests((data || []) as CustomRequest[]);
     }
     setLoading(false);
   };
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setInspirationFile(e.target.files[0]);
-    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -137,51 +126,6 @@ const CustomArt = () => {
     }
   };
 
-  // NEW FUNCTION: Handle inspiration image upload
-  const handleInspirationUpload = async (requestId: string) => {
-    if (!inspirationFile || !userId) return;
-
-    setInspirationLoading(true);
-
-    try {
-      // 1. Upload the image file to Supabase Storage
-      const fileExt = inspirationFile.name.split(".").pop();
-      const filePath = `inspiration/${requestId}/${Date.now()}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("artworks") // Using the existing 'artworks' bucket
-        .upload(filePath, inspirationFile);
-
-      if (uploadError) throw uploadError;
-
-      // 2. Get the public URL
-      const { data: urlData } = supabase.storage
-        .from("artworks")
-        .getPublicUrl(filePath);
-      
-      const imageUrl = urlData.publicUrl;
-
-      // 3. Update the request with the image URL
-      const { error: updateError } = await supabase
-        .from('custom_requests')
-        .update({ inspiration_image_url: imageUrl })
-        .eq('id', requestId);
-
-      if (updateError) throw updateError;
-
-      toast({
-        title: "Image Uploaded",
-        description: "Your inspiration image has been sent to the artist.",
-      });
-      setInspirationFile(null);
-      fetchRequests(userId); // Refresh to show the image
-
-    } catch (error) {
-      toast({ title: "Upload Failed", description: (error as Error).message, variant: "destructive" });
-    } finally {
-      setInspirationLoading(false);
-    }
-  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -247,40 +191,16 @@ const CustomArt = () => {
                     <CardContent className="p-4 pt-0 space-y-4">
                       <p className="text-sm">{req.description}</p>
                       
-                      {/* NEW: Accepted Notification and Upload Form */}
-                      {req.status === 'accepted' && req.artist && (
-                        <div className="p-3 bg-green-50/50 border border-green-200 rounded-lg space-y-3">
+                      {/* Accepted Notification */}
+                      {req.status === 'accepted' && (
+                        <div className="p-3 bg-green-50/50 border border-green-200 rounded-lg space-y-2">
                           <div className="flex items-center gap-2">
                             <CheckCircle className="h-5 w-5 text-green-600" />
                             <h4 className="font-bold text-green-700">Request Accepted!</h4>
                           </div>
                           <p className="text-sm">
-                            Artist **{req.artist.full_name || req.artist.email}** has claimed your request and will contact you shortly.
+                            An artist has claimed your request and will contact you shortly.
                           </p>
-                          
-                          {/* Inspiration Image Upload */}
-                          {!req.inspiration_image_url ? (
-                            <form className="space-y-2 pt-2 border-t" onSubmit={(e) => { e.preventDefault(); handleInspirationUpload(req.id); }}>
-                              <Label htmlFor={`inspiration-${req.id}`} className="flex items-center text-sm font-medium">
-                                <ImageIcon className="h-4 w-4 mr-2" /> Upload Inspiration Image
-                              </Label>
-                              <Input 
-                                id={`inspiration-${req.id}`}
-                                type="file" 
-                                onChange={handleFileChange} 
-                                accept="image/*"
-                                required
-                              />
-                              <Button type="submit" size="sm" className="w-full" disabled={inspirationLoading || !inspirationFile}>
-                                {inspirationLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Upload & Send"}
-                              </Button>
-                            </form>
-                          ) : (
-                            <div className="p-2 bg-green-100 rounded-md text-sm text-green-800 flex items-center">
-                              <CheckCircle className="h-4 w-4 mr-2" /> Inspiration image uploaded.
-                            </div>
-                          )}
-
                         </div>
                       )}
 
